@@ -164,3 +164,8 @@ button,input { font:inherit; } button,a { cursor:pointer; } button { border:0; }
 /* Keep the final fields clear of the persistent action bars at every viewport size. */
 .wizardMain,.studentMain{padding-bottom:120px;scroll-padding-block-end:120px;scrollbar-gutter:stable;overscroll-behavior:contain}.wizardPanel,.studentPanel{padding-bottom:2px}
 @media(max-width:720px){.wizardBody,.studentBody{scroll-padding-block-end:110px;overscroll-behavior:contain}.wizardMain,.studentMain{padding-bottom:110px}}
+
+/* All active teacher and student sessions occupy the complete browser viewport. */
+.wizardBackdrop,.studentBackdrop,.examBackdrop,.teacherDashboardBackdrop{padding:0;place-items:stretch;overflow:hidden}
+.examWizard,.studentFlow,.examWorkspace,.teacherDashboard{width:100%;max-width:none;height:100vh;height:100dvh;max-height:none;border:0;border-radius:0;box-shadow:none}
+html:has(.wizardBackdrop),html:has(.studentBackdrop),html:has(.examBackdrop),html:has(.teacherDashboardBackdrop),body:has(.wizardBackdrop),body:has(.studentBackdrop),body:has(.examBackdrop),body:has(.teacherDashboardBackdrop){overflow:hidden}
