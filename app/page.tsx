@@ -1216,7 +1216,6 @@ export default function Home() {
 <Icon name="check" size={16} />
 <span>No integrity signals recorded for this submission.</span>
 </div>}<div className="evidenceNote">
-<Icon name="lock" size={13} />
 <span>Metadata only in this MVP. Evidence is minimized and shown for teacher review.</span>
 </div>
 </section>
@@ -1424,7 +1423,7 @@ export default function Home() {
             <div className="studentBody">
 <aside className="studentAside">
 <span className="studentAsideIcon">
-<Icon name={studentStep === 0 ? "people" : studentStep === 1 ? "lock" : "shield"} size={22} />
+<Icon name={studentStep === 0 ? "people" : "shield"} size={22} />
 </span>
 <span className="sectionKicker">{studentStep === 0 ? "Welcome" : studentStep === 1 ? "Your privacy matters" : "Almost ready"}</span>
 <h2>{studentStep === 0 ? "Start with your exam details." : studentStep === 1 ? "Know what is monitored before you begin." : "Make sure your device is ready."}</h2>
@@ -1615,7 +1614,7 @@ export default function Home() {
             <div className="wizardBody">
               <aside className="wizardAside">
 <span className="wizardAsideIcon">
-<Icon name={wizardStep === 1 ? "chart" : wizardStep === 2 ? "shield" : "lock"} size={21} />
+<Icon name={wizardStep === 1 ? "chart" : "shield"} size={21} />
 </span>
 <span className="sectionKicker">{wizardStep === 0 ? "Start with the basics" : wizardStep === 1 ? "Make it yours" : wizardStep === 2 ? "Protect the experience" : "Ready to share"}</span>
 <h2>{wizardStep === 0 ? "A clear beginning makes every exam easier to review." : wizardStep === 1 ? "Keep each question focused and fair." : wizardStep === 2 ? "Use signals as context, never as a verdict." : "Give students a simple path in and teachers a private path back."}</h2>
@@ -2075,35 +2074,13 @@ export default function Home() {
 </div>
 </section>
 
-      <footer className="homeFooter">
-<div>
-<a className="homeLogo" href="#top">
-<span className="wordmarkText">
-<span className="wordmarkExam">EXAM</span>
-<span className="wordmarkGuard">GUARD</span>
-</span>
-</a>
-<p>Integrity, made clearer.<br />For teachers and students.</p>
-</div>
-<div className="footerLinks">
-<a href="#how-it-works">How it works</a>
-<a href="#detection">Detection</a>
-<a href="#trust">Trust & privacy</a>
-<a href="#top">Teacher guide</a>
-</div>
-<div className="footerBottom">
-<span>© 2024 ExamGuard prototype</span>
-<span>Evidence over verdicts.</span>
-</div>
-</footer>
-
       {modal && <div className="modalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
 <section className="startModal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
 <button className="modalClose" onClick={() => setModal(null)} aria-label="Close">
 <Icon name="close" size={17} />
 </button>
 <span className="modalIcon">
-<Icon name={modal === "create" ? "chart" : "lock"} size={23} />
+<Icon name={modal === "create" ? "chart" : "shield"} size={23} />
 </span>
 <span className="sectionKicker">{modal === "create" ? "Teacher mode" : "Returning teacher"}</span>
 <h2 id="modal-title">{modal === "create" ? "Create a new exam" : "Manage an existing exam"}</h2>
