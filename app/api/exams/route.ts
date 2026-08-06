@@ -37,10 +37,12 @@ export async function GET(request: Request) {
     const submissionRows = await db.select().from(submissions).where(eq(submissions.examCode, code));
     const teacherSubmissions = await Promise.all(submissionRows.map(async (item) => {
       const submission = JSON.parse(item.payload) as Record<string, unknown> & { photoKey?: string };
-      if (!submission.photoKey) return submission;
+      const submittedAt = item.createdAt.includes("T") ? item.createdAt : `${item.createdAt.replace(" ", "T")}Z`;
+      const databaseSubmission = { ...submission, id: item.id, submitted: submittedAt };
+      if (!submission.photoKey) return databaseSubmission;
       const photo = await env.PHOTOS.get(submission.photoKey);
-      if (!photo) return submission;
-      return { ...submission, photo: `data:${photo.httpMetadata?.contentType || "image/jpeg"};base64,${bytesToBase64(new Uint8Array(await photo.arrayBuffer()))}` };
+      if (!photo) return databaseSubmission;
+      return { ...databaseSubmission, photo: `data:${photo.httpMetadata?.contentType || "image/jpeg"};base64,${bytesToBase64(new Uint8Array(await photo.arrayBuffer()))}` };
     }));
     return Response.json({ exam, submissions: teacherSubmissions });
   } catch (error) {

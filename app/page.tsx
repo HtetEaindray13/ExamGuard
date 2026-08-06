@@ -276,6 +276,16 @@ export default function Home() {
     return `${minutes}:${seconds}`;
   }
 
+  function formatSubmissionTime(value: string) {
+    const timestamp = Date.parse(value);
+    if (Number.isNaN(timestamp)) return value;
+    const elapsedSeconds = Math.max(0, Math.floor((Date.now() - timestamp) / 1000));
+    if (elapsedSeconds < 60) return "Just now";
+    if (elapsedSeconds < 3600) return `${Math.floor(elapsedSeconds / 60)}m ago`;
+    if (elapsedSeconds < 86400) return `${Math.floor(elapsedSeconds / 3600)}h ago`;
+    return new Date(timestamp).toLocaleString([], { year: "numeric", month: "short", day: "numeric", hour: "numeric", minute: "2-digit" });
+  }
+
   const buildStudentSubmission = useCallback((): Submission => {
     const total = examQuestions.reduce((sum, question) => sum + question.points, 0);
     const score = examQuestions.reduce((sum, question) => sum + (examAnswers[question.id] === question.answer ? question.points : 0), 0);
@@ -293,7 +303,8 @@ export default function Home() {
     });
     const initials = studentName.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "ST";
     const risk: RiskLevel = examEvents.some((event) => event.level === "High") ? "High" : examEvents.some((event) => event.level === "Medium") ? "Medium" : "Low";
-    return { id: `${examCode}-${studentId.trim()}`, examCode, studentId, name: studentName.trim() || "Student", initials, status: "Submitted", score, total, events: examEvents.length, risk, submitted: "Just now", duration: formatExamTime(Math.max(0, (Math.max(1, Number(studentExam?.duration || duration) || 45) * 60) - examSecondsLeft)), answers, timeline: examEvents, identityPhoto: identityPhoto ?? undefined };
+    const submissionId = globalThis.crypto?.randomUUID?.() ?? `${examCode}-${studentId.trim()}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
+    return { id: submissionId, examCode, studentId, name: studentName.trim() || "Student", initials, status: "Submitted", score, total, events: examEvents.length, risk, submitted: new Date().toISOString(), duration: formatExamTime(Math.max(0, (Math.max(1, Number(studentExam?.duration || duration) || 45) * 60) - examSecondsLeft)), answers, timeline: examEvents, identityPhoto: identityPhoto ?? undefined };
   }, [examQuestions, examAnswers, studentName, examEvents, examCode, studentId, studentExam?.duration, duration, examSecondsLeft, identityPhoto]);
 
   const saveStudentSubmission = useCallback(() => {
@@ -687,7 +698,7 @@ export default function Home() {
           setTeacherExam(localExam);
         } else {
           setTeacherExam(result.exam);
-          setRealSubmissions(result.submissions ?? []);
+          setRealSubmissions((result.submissions ?? []).map((submission) => ({ ...submission, submitted: formatSubmissionTime(submission.submitted) })));
         }
       } catch {
         setManageError("The exam database is temporarily unavailable.");
