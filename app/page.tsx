@@ -365,9 +365,6 @@ export default function Home() {
   const autoScoredSubmissions = dashboardSubmissions.filter((submission) => submission.score !== null && submission.total > 0);
   const dashboardAverage = autoScoredSubmissions.length ? Math.round(autoScoredSubmissions.reduce((sum, submission) => sum + ((submission.score ?? 0) / submission.total) * 100, 0) / autoScoredSubmissions.length) : 0;
   const filteredDashboardSubmissions = [...dashboardSubmissions].filter((submission) => dashboardRiskFilter === "All" || submission.risk === dashboardRiskFilter).sort((first, second) => dashboardSort === "priority" ? ({ High: 0, Medium: 1, Low: 2 }[first.risk] - { High: 0, Medium: 1, Low: 2 }[second.risk]) || second.events - first.events : second.events - first.events);
-  const dashboardEventTotal = dashboardSubmissions.reduce((sum, submission) => sum + submission.timeline.length, 0);
-  const dashboardHighEvents = dashboardSubmissions.reduce((sum, submission) => sum + submission.timeline.filter((event) => event.level === "High").length, 0);
-  const dashboardConfidence = dashboardEventTotal ? Math.round(dashboardSubmissions.reduce((sum, submission) => sum + submission.timeline.reduce((eventSum, event) => eventSum + (event.confidence ?? 0), 0), 0) / dashboardEventTotal) : 0;
 
   function formatExamTime(totalSeconds: number) {
     const minutes = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
@@ -1056,18 +1053,6 @@ export default function Home() {
 <small>{dashboardActiveCount ? `${dashboardActiveCount} active · ` : ""}Need review</small>
 </div>
 </article>
-</div>
-              <div className="dashboardSignalStrip">
-<div>
-<span className="dashboardSignalIcon">
-<Icon name="shield" size={15} />
-</span>
-<span>
-<strong>{dashboardEventTotal} integrity signals</strong>
-<small>{dashboardHighEvents} high-priority · {dashboardConfidence ? `${dashboardConfidence}% average confidence` : "Confidence appears after events are recorded"}</small>
-</span>
-</div>
-<span className="signalStripNote">Evidence over verdicts</span>
 </div>
               <section className="submissionSection">
 <div className="dashboardSectionHeading">
