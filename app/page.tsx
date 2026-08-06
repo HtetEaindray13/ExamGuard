@@ -4,25 +4,54 @@ import { useCallback, useEffect, useRef, useState } from "react";
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
-    arrow: <><path d="M4 12h15" /><path d="m13 6 6 6-6 6" /></>,
+    arrow: <>
+<path d="M4 12h15" />
+<path d="m13 6 6 6-6 6" />
+</>,
     check: <path d="m5 12 4 4L19 6" />,
-    shield: <><path d="M12 3 20 6v5c0 5-3.4 8.3-8 10-4.6-1.7-8-5-8-10V6l8-3Z" /><path d="m8.5 12 2.2 2.2 4.8-5" /></>,
-    eye: <><path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z" /><circle cx="12" cy="12" r="2.2" /></>,
-    tab: <><rect x="3" y="4" width="18" height="15" rx="2" /><path d="M3 8h18M8 4v4" /></>,
-    chart: <><path d="M4 19V5M4 19h17" /><path d="m7 15 3-4 3 2 5-7" /></>,
-    people: <><circle cx="9" cy="8" r="3" /><path d="M3 19c.6-3.2 2.5-5 6-5s5.4 1.8 6 5" /><path d="M16 5.5a3 3 0 0 1 0 5.8M17 14c2.3.3 3.7 1.9 4 4" /></>,
-    lock: <><rect x="5" y="10" width="14" height="10" rx="2" /><path d="M8 10V7a4 4 0 0 1 8 0v3" /></>,
-    menu: <><path d="M4 7h16M4 12h16M4 17h16" /></>,
-    close: <><path d="m6 6 12 12M18 6 6 18" /></>,
-    spark: <><path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z" /><path d="m19 16 .5 1.5L21 18l-1.5.5L19 20l-.5-1.5L17 18l1.5-.5L19 16Z" /></>,
+    shield: <>
+<path d="M12 3 20 6v5c0 5-3.4 8.3-8 10-4.6-1.7-8-5-8-10V6l8-3Z" />
+<path d="m8.5 12 2.2 2.2 4.8-5" />
+</>,
+    eye: <>
+<path d="M2.5 12s3.3-5 9.5-5 9.5 5 9.5 5-3.3 5-9.5 5-9.5-5-9.5-5Z" />
+<circle cx="12" cy="12" r="2.2" />
+</>,
+    tab: <>
+<rect x="3" y="4" width="18" height="15" rx="2" />
+<path d="M3 8h18M8 4v4" />
+</>,
+    chart: <>
+<path d="M4 19V5M4 19h17" />
+<path d="m7 15 3-4 3 2 5-7" />
+</>,
+    people: <>
+<circle cx="9" cy="8" r="3" />
+<path d="M3 19c.6-3.2 2.5-5 6-5s5.4 1.8 6 5" />
+<path d="M16 5.5a3 3 0 0 1 0 5.8M17 14c2.3.3 3.7 1.9 4 4" />
+</>,
+    lock: <>
+<rect x="5" y="10" width="14" height="10" rx="2" />
+<path d="M8 10V7a4 4 0 0 1 8 0v3" />
+</>,
+    menu: <>
+<path d="M4 7h16M4 12h16M4 17h16" />
+</>,
+    close: <>
+<path d="m6 6 12 12M18 6 6 18" />
+</>,
+    spark: <>
+<path d="m12 3 1.5 5.5L19 10l-5.5 1.5L12 17l-1.5-5.5L5 10l5.5-1.5L12 3Z" />
+<path d="m19 16 .5 1.5L21 18l-1.5.5L19 20l-.5-1.5L17 18l1.5-.5L19 16Z" />
+</>,
   };
   return <svg aria-hidden="true" width={size} height={size} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">{paths[name]}</svg>;
 }
 
 const navItems = [["How it works", "how-it-works"], ["Detection", "detection"], ["Trust & privacy", "trust"]];
 
-type QuestionType = "multiple-choice" | "true-false";
-type ExamQuestion = { id: string; type: QuestionType; prompt: string; options: string[]; answer: string; points: number };
+type QuestionType = "multiple-choice" | "true-false" | "short-answer";
+type ExamQuestion = { id: string; type: QuestionType; prompt: string; options: string[]; answer: string; points: number; maxWords?: number };
 type MonitoringSettings = { tabSwitch: boolean; fullscreen: boolean; clipboard: boolean; faceAbsence: boolean; multipleFaces: boolean; cameraStopped: boolean; headOrientation: boolean };
 type StoredExam = { id: string; title: string; subject: string; instructions: string; duration: string; questions: ExamQuestion[]; monitoring: MonitoringSettings; studentCode: string; teacherKey: string; createdAt: string };
 type RiskLevel = "Low" | "Medium" | "High";
@@ -49,7 +78,8 @@ type Submission = {
   risk: RiskLevel;
   submitted: string;
   duration: string;
-  answers: { prompt: string; student: string; correct: string; result: "Correct" | "Incorrect" | "Not answered"; points: string }[];
+  manualReviewCount?: number;
+  answers: { prompt: string; student: string; correct: string; result: "Correct" | "Incorrect" | "Not answered" | "Manual review"; points: string; questionType?: QuestionType; maxWords?: number }[];
   timeline: IntegrityEvent[];
   identityPhoto?: string;
   photo?: string;
@@ -207,9 +237,19 @@ const demoSubmissions: Submission[] = [
 ];
 
 function newQuestion(type: QuestionType = "multiple-choice"): ExamQuestion {
+  if (type === "short-answer") return { id: `q-${Date.now()}-${Math.random()}`, type, prompt: "", options: [], answer: "", points: 1, maxWords: 100 };
   return type === "true-false"
     ? { id: `q-${Date.now()}-${Math.random()}`, type, prompt: "", options: ["True", "False"], answer: "True", points: 1 }
     : { id: `q-${Date.now()}-${Math.random()}`, type, prompt: "", options: ["", "", ""], answer: "A", points: 1 };
+}
+
+function countWords(value: string) {
+  return value.trim() ? value.trim().split(/\s+/).length : 0;
+}
+
+function limitWords(value: string, maximum: number) {
+  const words = value.match(/\S+\s*/g) ?? [];
+  return words.slice(0, maximum).join("").trimEnd();
 }
 
 const demoExamQuestions: ExamQuestion[] = [
@@ -314,7 +354,8 @@ export default function Home() {
   const dashboardSubmissions = teacherExam ? realSubmissions.filter((submission) => submission.examCode === teacherExam.studentCode) : demoSubmissions;
   const dashboardSubmittedCount = dashboardSubmissions.filter((submission) => submission.status === "Submitted").length;
   const dashboardActiveCount = dashboardSubmissions.filter((submission) => submission.status === "In progress").length;
-  const dashboardAverage = dashboardSubmittedCount ? Math.round(dashboardSubmissions.filter((submission) => submission.score !== null).reduce((sum, submission) => sum + ((submission.score ?? 0) / submission.total) * 100, 0) / dashboardSubmittedCount) : 0;
+  const autoScoredSubmissions = dashboardSubmissions.filter((submission) => submission.score !== null && submission.total > 0);
+  const dashboardAverage = autoScoredSubmissions.length ? Math.round(autoScoredSubmissions.reduce((sum, submission) => sum + ((submission.score ?? 0) / submission.total) * 100, 0) / autoScoredSubmissions.length) : 0;
   const filteredDashboardSubmissions = [...dashboardSubmissions].filter((submission) => dashboardRiskFilter === "All" || submission.risk === dashboardRiskFilter).sort((first, second) => dashboardSort === "priority" ? ({ High: 0, Medium: 1, Low: 2 }[first.risk] - { High: 0, Medium: 1, Low: 2 }[second.risk]) || second.events - first.events : second.events - first.events);
   const dashboardEventTotal = dashboardSubmissions.reduce((sum, submission) => sum + submission.timeline.length, 0);
   const dashboardHighEvents = dashboardSubmissions.reduce((sum, submission) => sum + submission.timeline.filter((event) => event.level === "High").length, 0);
@@ -337,24 +378,27 @@ export default function Home() {
   }
 
   const buildStudentSubmission = useCallback((): Submission => {
-    const total = examQuestions.reduce((sum, question) => sum + question.points, 0);
-    const score = examQuestions.reduce((sum, question) => sum + (examAnswers[question.id] === question.answer ? question.points : 0), 0);
+    const autoGradedQuestions = examQuestions.filter((question) => question.type !== "short-answer");
+    const total = autoGradedQuestions.reduce((sum, question) => sum + question.points, 0);
+    const score = autoGradedQuestions.reduce((sum, question) => sum + (examAnswers[question.id] === question.answer ? question.points : 0), 0);
+    const manualReviewCount = examQuestions.filter((question) => question.type === "short-answer").length;
     const answers = examQuestions.map((question) => {
       const studentValue = examAnswers[question.id];
       const correctValue = question.answer;
       const displayAnswer = (value: string) => {
         if (!value) return "Not answered";
-        if (question.type === "true-false") return value;
+        if (question.type === "short-answer" || question.type === "true-false") return value;
         const optionIndex = value.charCodeAt(0) - 65;
         return `${value}. ${question.options[optionIndex] || value}`;
       };
-      const result: "Correct" | "Incorrect" | "Not answered" = !studentValue ? "Not answered" : studentValue === correctValue ? "Correct" : "Incorrect";
+      const result: "Correct" | "Incorrect" | "Not answered" | "Manual review" = !studentValue ? "Not answered" : question.type === "short-answer" ? "Manual review" : studentValue === correctValue ? "Correct" : "Incorrect";
+      if (question.type === "short-answer") return { prompt: question.prompt, student: displayAnswer(studentValue), correct: "Not auto-scored", result, points: "Teacher marks outside ExamGuard", questionType: question.type, maxWords: question.maxWords };
       return { prompt: question.prompt, student: displayAnswer(studentValue), correct: displayAnswer(correctValue), result, points: result === "Correct" ? `${question.points} / ${question.points}` : result === "Not answered" ? "—" : `0 / ${question.points}` };
     });
     const initials = studentName.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "ST";
     const risk: RiskLevel = examEvents.some((event) => event.level === "High") ? "High" : examEvents.some((event) => event.level === "Medium") ? "Medium" : "Low";
     const submissionId = globalThis.crypto?.randomUUID?.() ?? `${examCode}-${studentId.trim()}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    return { id: submissionId, examCode, studentId, name: studentName.trim() || "Student", initials, status: "Submitted", score, total, events: examEvents.length, risk, submitted: new Date().toISOString(), duration: formatExamTime(Math.max(0, (Math.max(1, Number(studentExam?.duration || duration) || 45) * 60) - examSecondsLeft)), answers, timeline: examEvents, identityPhoto: identityPhoto ?? undefined };
+    return { id: submissionId, examCode, studentId, name: studentName.trim() || "Student", initials, status: "Submitted", score, total, manualReviewCount, events: examEvents.length, risk, submitted: new Date().toISOString(), duration: formatExamTime(Math.max(0, (Math.max(1, Number(studentExam?.duration || duration) || 45) * 60) - examSecondsLeft)), answers, timeline: examEvents, identityPhoto: identityPhoto ?? undefined };
   }, [examQuestions, examAnswers, studentName, examEvents, examCode, studentId, studentExam?.duration, duration, examSecondsLeft, identityPhoto]);
 
   const saveStudentSubmission = useCallback(() => {
@@ -817,7 +861,7 @@ export default function Home() {
   function changeQuestionType(type: QuestionType) {
     const question = questions[activeQuestion];
     if (!question) return;
-    updateQuestion(question.id, type === "true-false" ? { type, options: ["True", "False"], answer: "True" } : { type, options: ["", "", ""], answer: "A" });
+    updateQuestion(question.id, type === "true-false" ? { type, options: ["True", "False"], answer: "True" } : type === "short-answer" ? { type, options: [], answer: "", maxWords: question.maxWords ?? 100 } : { type, options: ["", "", ""], answer: "A" });
   }
 
   function addQuestion(type: QuestionType = "multiple-choice") {
@@ -917,35 +961,286 @@ export default function Home() {
   return (
     <main className="homePage">
       <header className="homeHeader">
-        <a className="homeLogo" href="#top" aria-label="ExamGuard home"><span className="wordmarkText"><span className="wordmarkExam">EXAM</span><span className="wordmarkGuard">GUARD</span></span></a>
+        <a className="homeLogo" href="#top" aria-label="ExamGuard home">
+<span className="wordmarkText">
+<span className="wordmarkExam">EXAM</span>
+<span className="wordmarkGuard">GUARD</span>
+</span>
+</a>
         <nav className={`homeNav ${menuOpen ? "open" : ""}`} aria-label="Primary navigation">
           {navItems.map(([label, href]) => <a key={href} href={`#${href}`} onClick={closeMenu}>{label}</a>)}
           <button className="mobileAction" onClick={() => { setModal("manage"); closeMenu(); }}>Manage existing exam</button>
           <button className="mobileAction mobilePrimary" onClick={() => { startCreateWizard(); closeMenu(); }}>Create new exam</button>
         </nav>
-        <div className="homeActions"><button className="headerLink" onClick={() => setModal("manage")}>Manage</button><button className="headerButton" onClick={startCreateWizard}>Create</button></div>
-        <button className="menuButton" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? "Close menu" : "Open menu"}><Icon name={menuOpen ? "close" : "menu"} size={21} /></button>
+        <div className="homeActions">
+<button className="headerLink" onClick={() => setModal("manage")}>Manage</button>
+<button className="headerButton" onClick={startCreateWizard}>Create</button>
+</div>
+        <button className="menuButton" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? "Close menu" : "Open menu"}>
+<Icon name={menuOpen ? "close" : "menu"} size={21} />
+</button>
       </header>
 
       {teacherDashboard && (
         <div className="teacherDashboardBackdrop" role="presentation">
           <section className="teacherDashboard" role="dialog" aria-modal="true" aria-labelledby="teacher-dashboard-title">
             <header className="teacherDashboardHeader">
-              <a className="dashboardBrand" href="#top" onClick={() => setTeacherDashboard(false)} aria-label="Exit teacher dashboard"><span>EXAM</span>GUARD</a>
-              <div className="dashboardHeaderCopy"><span>Teacher review</span><strong id="teacher-dashboard-title">{teacherExam?.title || "Web Development Fundamentals"}</strong></div>
-              <div className="dashboardHeaderActions"><span className="dashboardSession"><Icon name="lock" size={13} /> Demo session</span><button type="button" className="dashboardExit" onClick={() => setTeacherDashboard(false)}>Exit <Icon name="close" size={14} /></button></div>
+              <a className="dashboardBrand" href="#top" onClick={() => setTeacherDashboard(false)} aria-label="Exit teacher dashboard">
+<span>EXAM</span>GUARD</a>
+              <div className="dashboardHeaderCopy">
+<span>Teacher review</span>
+<strong id="teacher-dashboard-title">{teacherExam?.title || "Web Development Fundamentals"}</strong>
+</div>
+              <div className="dashboardHeaderActions">
+<span className="dashboardSession">
+<Icon name="lock" size={13} /> Demo session</span>
+<button type="button" className="dashboardExit" onClick={() => setTeacherDashboard(false)}>Exit <Icon name="close" size={14} />
+</button>
+</div>
             </header>
             {!selectedSubmission ? <main className="dashboardMain">
-              <div className="dashboardIntro"><div><span className="sectionKicker">Exam overview</span><h1>Review with context.</h1><p>Scores and integrity signals are kept together so you can make the final call.</p></div><div className="dashboardIntroActions"><button type="button" className="dashboardSecondary" onClick={() => setTeacherDashboard(false)}>Back to home</button><button type="button" className="dashboardPrimary" onClick={startCreateWizard}>Create another exam <Icon name="arrow" size={14} /></button></div></div>
-              <div className="dashboardStats"><article><span className="dashboardStatIcon blue"><Icon name="people" size={17} /></span><div><strong>{dashboardSubmissions.length}</strong><small>{teacherExam ? "Students joined" : "Demo students"}</small></div></article><article><span className="dashboardStatIcon green"><Icon name="check" size={17} /></span><div><strong>{dashboardSubmittedCount}</strong><small>Submitted</small></div></article><article><span className="dashboardStatIcon gold"><Icon name="chart" size={17} /></span><div><strong>{dashboardAverage ? `${dashboardAverage}%` : "—"}</strong><small>Average score</small></div></article><article><span className="dashboardStatIcon rose"><Icon name="shield" size={17} /></span><div><strong>{needsReviewCount}</strong><small>{dashboardActiveCount ? `${dashboardActiveCount} active · ` : ""}Need review</small></div></article></div>
-              <div className="dashboardSignalStrip"><div><span className="dashboardSignalIcon"><Icon name="shield" size={15} /></span><span><strong>{dashboardEventTotal} integrity signals</strong><small>{dashboardHighEvents} high-priority · {dashboardConfidence ? `${dashboardConfidence}% average confidence` : "Confidence appears after events are recorded"}</small></span></div><span className="signalStripNote">Evidence over verdicts</span></div>
-              <section className="submissionSection"><div className="dashboardSectionHeading"><div><span className="sectionKicker">Student submissions</span><h2>One place for every answer.</h2></div><span className="dashboardReviewCount">{reviewedCount} reviewed this session</span></div><div className="dashboardFilters"><div className="filterGroup" role="group" aria-label="Filter by priority"><span>Show</span>{(["All", "High", "Medium", "Low"] as RiskFilter[]).map((filter) => <button type="button" key={filter} className={dashboardRiskFilter === filter ? "active" : ""} onClick={() => setDashboardRiskFilter(filter)}>{filter}</button>)}</div><label className="sortControl">Sort by<select value={dashboardSort} onChange={(event) => setDashboardSort(event.target.value as SortMode)}><option value="priority">Priority</option><option value="latest">Most signals</option></select></label></div>{dashboardSubmissions.length ? filteredDashboardSubmissions.length ? <div className="submissionTable" role="table" aria-label="Student submissions"><div className="submissionTableHead" role="row"><span>Student</span><span>Status</span><span>Score</span><span>Signals</span><span>Priority</span><span /></div>{filteredDashboardSubmissions.map((submission) => { const record = reviewRecords[submission.id]; return <div className="submissionRow" role="row" key={submission.id}><div className="submissionStudent"><span className="studentAvatar">{submission.photo ? <img src={submission.photo} alt={`${submission.name} identity verification`} /> : submission.initials}</span><span><strong>{submission.name}</strong><small>{submission.submitted}</small></span></div><span className={`submissionStatus ${submission.status === "Submitted" ? "submitted" : "progress"}`}><i />{submission.status}</span><strong className="submissionScore">{submission.score === null ? "—" : `${submission.score}/${submission.total}`}</strong><span className="submissionSignals"><Icon name="shield" size={13} /> {submission.events} event{submission.events === 1 ? "" : "s"}</span><span className={`riskChip ${submission.risk.toLowerCase()}`}>{record?.decision !== "Unreviewed" ? "Reviewed" : submission.risk} </span><button type="button" className="reviewRowButton" onClick={() => openSubmission(submission.id)}>{record?.decision !== "Unreviewed" ? "View review" : "Review submission"}<Icon name="arrow" size={13} /></button></div>; })}</div> : <div className="dashboardEmpty compact"><span className="dashboardEmptyIcon"><Icon name="shield" size={20} /></span><strong>No students match this filter</strong><p>Try showing all priority levels to see every submission.</p></div> : <div className="dashboardEmpty"><span className="dashboardEmptyIcon"><Icon name="people" size={20} /></span><strong>No submissions yet</strong><p>Share the six-digit student code. Completed student attempts will appear here automatically.</p></div>}<div className="dashboardTableNote"><Icon name="shield" size={14} /><span>Signals are evidence for review, not an automatic verdict. Events show duration and context before a teacher decides.</span></div></section>
+              <div className="dashboardIntro">
+<div>
+<span className="sectionKicker">Exam overview</span>
+<h1>Review with context.</h1>
+<p>Scores and integrity signals are kept together so you can make the final call.</p>
+</div>
+<div className="dashboardIntroActions">
+<button type="button" className="dashboardSecondary" onClick={() => setTeacherDashboard(false)}>Back to home</button>
+<button type="button" className="dashboardPrimary" onClick={startCreateWizard}>Create another exam <Icon name="arrow" size={14} />
+</button>
+</div>
+</div>
+              <div className="dashboardStats">
+<article>
+<span className="dashboardStatIcon blue">
+<Icon name="people" size={17} />
+</span>
+<div>
+<strong>{dashboardSubmissions.length}</strong>
+<small>{teacherExam ? "Students joined" : "Demo students"}</small>
+</div>
+</article>
+<article>
+<span className="dashboardStatIcon green">
+<Icon name="check" size={17} />
+</span>
+<div>
+<strong>{dashboardSubmittedCount}</strong>
+<small>Submitted</small>
+</div>
+</article>
+<article>
+<span className="dashboardStatIcon gold">
+<Icon name="chart" size={17} />
+</span>
+<div>
+<strong>{dashboardAverage ? `${dashboardAverage}%` : "—"}</strong>
+<small>Average score</small>
+</div>
+</article>
+<article>
+<span className="dashboardStatIcon rose">
+<Icon name="shield" size={17} />
+</span>
+<div>
+<strong>{needsReviewCount}</strong>
+<small>{dashboardActiveCount ? `${dashboardActiveCount} active · ` : ""}Need review</small>
+</div>
+</article>
+</div>
+              <div className="dashboardSignalStrip">
+<div>
+<span className="dashboardSignalIcon">
+<Icon name="shield" size={15} />
+</span>
+<span>
+<strong>{dashboardEventTotal} integrity signals</strong>
+<small>{dashboardHighEvents} high-priority · {dashboardConfidence ? `${dashboardConfidence}% average confidence` : "Confidence appears after events are recorded"}</small>
+</span>
+</div>
+<span className="signalStripNote">Evidence over verdicts</span>
+</div>
+              <section className="submissionSection">
+<div className="dashboardSectionHeading">
+<div>
+<span className="sectionKicker">Student submissions</span>
+<h2>One place for every answer.</h2>
+</div>
+<span className="dashboardReviewCount">{reviewedCount} reviewed this session</span>
+</div>
+<div className="dashboardFilters">
+<div className="filterGroup" role="group" aria-label="Filter by priority">
+<span>Show</span>{(["All", "High", "Medium", "Low"] as RiskFilter[]).map((filter) => <button type="button" key={filter} className={dashboardRiskFilter === filter ? "active" : ""} onClick={() => setDashboardRiskFilter(filter)}>{filter}</button>)}</div>
+<label className="sortControl">Sort by<select value={dashboardSort} onChange={(event) => setDashboardSort(event.target.value as SortMode)}>
+<option value="priority">Priority</option>
+<option value="latest">Most signals</option>
+</select>
+</label>
+</div>{dashboardSubmissions.length ? filteredDashboardSubmissions.length ? <div className="submissionTable" role="table" aria-label="Student submissions">
+<div className="submissionTableHead" role="row">
+<span>Student</span>
+<span>Status</span>
+<span>Score</span>
+<span>Signals</span>
+<span>Priority</span>
+<span />
+</div>{filteredDashboardSubmissions.map((submission) => { const record = reviewRecords[submission.id]; return <div className="submissionRow" role="row" key={submission.id}>
+<div className="submissionStudent">
+<span className="studentAvatar">{submission.photo ? <img src={submission.photo} alt={`${submission.name} identity verification`} /> : submission.initials}</span>
+<span>
+<strong>{submission.name}</strong>
+<small>{submission.submitted}</small>
+</span>
+</div>
+<span className={`submissionStatus ${submission.status === "Submitted" ? "submitted" : "progress"}`}>
+<i />{submission.status}</span>
+<strong className="submissionScore">{submission.total === 0 ? "Manual" : submission.score === null ? "—" : `${submission.score}/${submission.total}`}</strong>
+<span className="submissionSignals">
+<Icon name="shield" size={13} /> {submission.events} event{submission.events === 1 ? "" : "s"}</span>
+<span className={`riskChip ${submission.risk.toLowerCase()}`}>{record?.decision !== "Unreviewed" ? "Reviewed" : submission.risk} </span>
+<button type="button" className="reviewRowButton" onClick={() => openSubmission(submission.id)}>{record?.decision !== "Unreviewed" ? "View review" : "Review submission"}<Icon name="arrow" size={13} />
+</button>
+</div>; })}</div> : <div className="dashboardEmpty compact">
+<span className="dashboardEmptyIcon">
+<Icon name="shield" size={20} />
+</span>
+<strong>No students match this filter</strong>
+<p>Try showing all priority levels to see every submission.</p>
+</div> : <div className="dashboardEmpty">
+<span className="dashboardEmptyIcon">
+<Icon name="people" size={20} />
+</span>
+<strong>No submissions yet</strong>
+<p>Share the six-digit student code. Completed student attempts will appear here automatically.</p>
+</div>}<div className="dashboardTableNote">
+<Icon name="shield" size={14} />
+<span>Signals are evidence for review, not an automatic verdict. Events show duration and context before a teacher decides.</span>
+</div>
+</section>
             </main> : <main className="reviewMain">
-              <div className="reviewToolbar"><button type="button" className="reviewBack" onClick={() => { setSelectedSubmissionId(null); setReviewNotice(""); }}><Icon name="arrow" size={15} /> All submissions</button><span className="reviewToolbarHint">Teacher review · {selectedSubmission.name}</span></div>
-              <div className="reviewHero"><div className="reviewStudentIdentity">{selectedSubmission.photo ? <button type="button" className="reviewAvatar photoPreviewTrigger" onClick={() => setPhotoPreview({ src: selectedSubmission.photo!, name: selectedSubmission.name })} aria-label={`View larger identity photo for ${selectedSubmission.name}`}><img src={selectedSubmission.photo} alt={`${selectedSubmission.name} identity verification photo`} /></button> : <span className="reviewAvatar">{selectedSubmission.initials}</span>}<div><span className="sectionKicker">Student submission</span><h1>{selectedSubmission.name}</h1><p>{selectedSubmission.status} · {selectedSubmission.duration} · {selectedSubmission.submitted}</p>{selectedSubmission.photo && <small className="identityVerifiedLabel"><Icon name="check" size={11} /> Click photo to enlarge</small>}</div></div><div className="reviewHeroScore"><span className={`riskChip ${selectedSubmission.risk.toLowerCase()}`}>{selectedSubmission.risk} priority</span><strong>{selectedSubmission.score === null ? "—" : `${Math.round((selectedSubmission.score / selectedSubmission.total) * 100)}%`}</strong><small>{selectedSubmission.score === null ? "Score in progress" : `${selectedSubmission.score}/${selectedSubmission.total} points`}</small></div></div>
-              {photoPreview && <div className="identityPhotoLightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPhotoPreview(null); }}><section role="dialog" aria-modal="true" aria-label={`${photoPreview.name} identity verification photo`}><header><div><span>Identity verification</span><strong>{photoPreview.name}</strong></div><button type="button" onClick={() => setPhotoPreview(null)} aria-label="Close photo"><Icon name="close" size={18} /></button></header><img src={photoPreview.src} alt={`${photoPreview.name} enlarged identity verification photo`} /></section></div>}
-              {reviewNotice && <div className="reviewNotice" role="status"><Icon name="check" size={14} />{reviewNotice}</div>}
-              <div className="reviewGrid"><section className="reviewCard answerReviewCard"><div className="reviewCardHeading"><div><span className="sectionKicker">Answer review</span><h2>Automatic grading</h2></div><span>{selectedSubmission.answers.filter((answer) => answer.result === "Correct").length} correct</span></div><div className="answerReviewList">{selectedSubmission.answers.map((answer, index) => <article key={`${selectedSubmission.id}-${index}`} className="answerReviewItem"><div className="answerReviewTop"><span>Question {String(index + 1).padStart(2, "0")}</span><b className={`answerResult ${answer.result.toLowerCase().replace(" ", "-")}`}>{answer.result}<em>{answer.points}</em></b></div><strong>{answer.prompt}</strong><div className="answerComparison"><div><small>Student answer</small><span>{answer.student}</span></div><div><small>Correct answer</small><span>{answer.correct}</span></div></div></article>)}</div></section><aside className="reviewSide"><section className="reviewCard timelineCard"><div className="reviewCardHeading"><div><span className="sectionKicker">Integrity timeline</span><h2>What happened?</h2></div><span>{selectedSubmission.events} signals</span></div>{selectedSubmission.timeline.length ? <div className="timelineList">{selectedSubmission.timeline.map((event, index) => <article className="timelineItem" key={`${selectedSubmission.id}-${event.time}`}><span className={`timelineIcon ${event.level.toLowerCase()}`}><Icon name={event.icon} size={14} /></span><div><div className="timelineTitle"><strong>{event.label}</strong><span className={`riskText ${event.level.toLowerCase()}`}>{event.level}</span></div><p>{event.detail}</p><small>{event.startTime && event.endTime ? `${event.startTime}–${event.endTime}` : event.time} · {event.duration} · {event.confidence ? `${event.confidence}% confidence` : "Context signal"} · {event.source || "Review metadata"}</small></div>{index < selectedSubmission.timeline.length - 1 && <i className="timelineLine" />}</article>)}</div> : <div className="timelineEmpty"><Icon name="check" size={16} /><span>No integrity signals recorded for this submission.</span></div>}<div className="evidenceNote"><Icon name="lock" size={13} /><span>Metadata only in this MVP. Evidence is minimized and shown for teacher review.</span></div></section><section className="reviewCard decisionCard"><div className="reviewCardHeading"><div><span className="sectionKicker">Human decision</span><h2>Classify this review</h2></div></div><p>Choose the outcome that best explains the complete session. This does not change the student score automatically.</p><label className="decisionLabel" htmlFor="review-decision">Decision<select id="review-decision" value={reviewDecision} onChange={(event) => setReviewDecision(event.target.value as ReviewDecision)}><option>Unreviewed</option><option>Valid concern</option><option>False detection</option><option>Technical issue</option><option>Acceptable</option></select></label><label className="decisionLabel" htmlFor="review-note">Private note<textarea id="review-note" value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Add context for your records..." rows={3} /></label><button type="button" className="dashboardPrimary decisionSave" onClick={saveReview}>Save teacher review <Icon name="check" size={14} /></button></section></aside></div>
+              <div className="reviewToolbar">
+<button type="button" className="reviewBack" onClick={() => { setSelectedSubmissionId(null); setReviewNotice(""); }}>
+<Icon name="arrow" size={15} /> All submissions</button>
+<span className="reviewToolbarHint">Teacher review · {selectedSubmission.name}</span>
+</div>
+              <div className="reviewHero">
+<div className="reviewStudentIdentity">{selectedSubmission.photo ? <button type="button" className="reviewAvatar photoPreviewTrigger" onClick={() => setPhotoPreview({ src: selectedSubmission.photo!, name: selectedSubmission.name })} aria-label={`View larger identity photo for ${selectedSubmission.name}`}>
+<img src={selectedSubmission.photo} alt={`${selectedSubmission.name} identity verification photo`} />
+</button> : <span className="reviewAvatar">{selectedSubmission.initials}</span>}<div>
+<span className="sectionKicker">Student submission</span>
+<h1>{selectedSubmission.name}</h1>
+<p>{selectedSubmission.status} · {selectedSubmission.duration} · {selectedSubmission.submitted}</p>{selectedSubmission.photo && <small className="identityVerifiedLabel">
+<Icon name="check" size={11} /> Click photo to enlarge</small>}</div>
+</div>
+<div className="reviewHeroScore">
+<span className={`riskChip ${selectedSubmission.risk.toLowerCase()}`}>{selectedSubmission.risk} priority</span>
+<strong>{selectedSubmission.total === 0 ? "Manual" : selectedSubmission.score === null ? "—" : `${Math.round((selectedSubmission.score / selectedSubmission.total) * 100)}%`}</strong>
+<small>{selectedSubmission.total === 0 ? "Teacher review required" : selectedSubmission.score === null ? "Score in progress" : `${selectedSubmission.score}/${selectedSubmission.total} auto-graded points`}</small>
+</div>
+</div>
+              {photoPreview && <div className="identityPhotoLightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPhotoPreview(null); }}>
+<section role="dialog" aria-modal="true" aria-label={`${photoPreview.name} identity verification photo`}>
+<header>
+<div>
+<span>Identity verification</span>
+<strong>{photoPreview.name}</strong>
+</div>
+<button type="button" onClick={() => setPhotoPreview(null)} aria-label="Close photo">
+<Icon name="close" size={18} />
+</button>
+</header>
+<img src={photoPreview.src} alt={`${photoPreview.name} enlarged identity verification photo`} />
+</section>
+</div>}
+              {reviewNotice && <div className="reviewNotice" role="status">
+<Icon name="check" size={14} />{reviewNotice}</div>}
+              <div className="reviewGrid">
+<section className="reviewCard answerReviewCard">
+<div className="reviewCardHeading">
+<div>
+<span className="sectionKicker">Answer review</span>
+<h2>Answer review</h2>
+</div>
+<span>{selectedSubmission.answers.filter((answer) => answer.result === "Correct").length} correct</span>
+</div>
+<div className="answerReviewList">{selectedSubmission.answers.map((answer, index) => <article key={`${selectedSubmission.id}-${index}`} className="answerReviewItem">
+<div className="answerReviewTop">
+<span>Question {String(index + 1).padStart(2, "0")}</span>
+<b className={`answerResult ${answer.result.toLowerCase().replace(" ", "-")}`}>{answer.result}<em>{answer.points}</em>
+</b>
+</div>
+<strong>{answer.prompt}</strong>
+{answer.questionType === "short-answer" ? <div className="shortAnswerReview">
+<small>Student response · {countWords(answer.student)} / {answer.maxWords ?? 100} words</small>
+<p>{answer.student}</p>
+<div className="aiAuthorshipNotice">
+<strong>AI authorship: Not determinable</strong>
+<span>No detector can reliably prove whether an answer was AI-generated. Review the response and objective session signals, such as paste attempts.</span>
+</div>
+<em>Teacher review required · Return marks outside ExamGuard</em>
+</div> : <div className="answerComparison">
+<div>
+<small>Student answer</small>
+<span>{answer.student}</span>
+</div>
+<div>
+<small>Correct answer</small>
+<span>{answer.correct}</span>
+</div>
+</div>}
+</article>)}</div>
+</section>
+<aside className="reviewSide">
+<section className="reviewCard timelineCard">
+<div className="reviewCardHeading">
+<div>
+<span className="sectionKicker">Integrity timeline</span>
+<h2>What happened?</h2>
+</div>
+<span>{selectedSubmission.events} signals</span>
+</div>{selectedSubmission.timeline.length ? <div className="timelineList">{selectedSubmission.timeline.map((event, index) => <article className="timelineItem" key={`${selectedSubmission.id}-${event.time}`}>
+<span className={`timelineIcon ${event.level.toLowerCase()}`}>
+<Icon name={event.icon} size={14} />
+</span>
+<div>
+<div className="timelineTitle">
+<strong>{event.label}</strong>
+<span className={`riskText ${event.level.toLowerCase()}`}>{event.level}</span>
+</div>
+<p>{event.detail}</p>
+<small>{event.startTime && event.endTime ? `${event.startTime}–${event.endTime}` : event.time} · {event.duration} · {event.confidence ? `${event.confidence}% confidence` : "Context signal"} · {event.source || "Review metadata"}</small>
+</div>{index < selectedSubmission.timeline.length - 1 && <i className="timelineLine" />}</article>)}</div> : <div className="timelineEmpty">
+<Icon name="check" size={16} />
+<span>No integrity signals recorded for this submission.</span>
+</div>}<div className="evidenceNote">
+<Icon name="lock" size={13} />
+<span>Metadata only in this MVP. Evidence is minimized and shown for teacher review.</span>
+</div>
+</section>
+<section className="reviewCard decisionCard">
+<div className="reviewCardHeading">
+<div>
+<span className="sectionKicker">Human decision</span>
+<h2>Classify this review</h2>
+</div>
+</div>
+<p>Choose the outcome that best explains the complete session. This does not change the student score automatically.</p>
+<label className="decisionLabel" htmlFor="review-decision">Decision<select id="review-decision" value={reviewDecision} onChange={(event) => setReviewDecision(event.target.value as ReviewDecision)}>
+<option>Unreviewed</option>
+<option>Valid concern</option>
+<option>False detection</option>
+<option>Technical issue</option>
+<option>Acceptable</option>
+</select>
+</label>
+<label className="decisionLabel" htmlFor="review-note">Private note<textarea id="review-note" value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Add context for your records..." rows={3} />
+</label>
+<button type="button" className="dashboardPrimary decisionSave" onClick={saveReview}>Save teacher review <Icon name="check" size={14} />
+</button>
+</section>
+</aside>
+</div>
             </main>}
           </section>
         </div>
@@ -954,11 +1249,154 @@ export default function Home() {
       {examWorkspace && (
         <div className="examBackdrop" role="presentation">
           <section className="examWorkspace" role="dialog" aria-modal="true" aria-labelledby="exam-workspace-title">
-            <header className="examTopbar"><a className="examBrand" href="#top" onClick={() => setExamWorkspace(false)} aria-label="Exit exam workspace"><span>EXAM</span>GUARD</a><div className="examTitleBlock"><span>EXAM IN PROGRESS</span><strong id="exam-workspace-title">{studentExam?.title || "Web Development Fundamentals"}</strong></div><div className="examTopStatus"><span><i /> Monitoring active</span><span><Icon name="people" size={13} /> {studentName || "Student"}</span></div><div className={`examTimer ${examSecondsLeft < 300 ? "urgent" : ""}`}><small>Time left</small><strong>{formatExamTime(examSecondsLeft)}</strong></div><button className="examExit" type="button" onClick={() => setExamWorkspace(false)}>Exit</button></header>
-            {examWarning && <div className="examWarning" role="status"><span className="examWarningIcon"><Icon name="shield" size={15} /></span><div><strong>Monitoring notice</strong><span>{examWarning}</span></div><button type="button" onClick={() => setExamWarning("")} aria-label="Dismiss warning">×</button></div>}
-            {orientationCountdown !== null && orientationDirection !== "center" && <div className="examOrientationBanner" role="status"><span><Icon name="eye" size={15} /></span><div><strong>Camera guidance</strong><small>Please face the camera · {orientationCountdown}s remaining</small></div></div>}
-            <div className="examBody">{!examSubmitted ? <main className="examMain"><div className="examQuestionHeader"><div><span className="sectionKicker">Question {String(examQuestionIndex + 1).padStart(2, "0")} of {String(examQuestions.length).padStart(2, "0")}</span><strong>{currentExamQuestion.type === "true-false" ? "True / False" : "Multiple choice"}</strong></div><button type="button" className={`examMarkButton ${examMarked[currentExamQuestion.id] ? "marked" : ""}`} onClick={toggleExamMark}><Icon name="spark" size={14} /> {examMarked[currentExamQuestion.id] ? "Marked for review" : "Mark for review"}</button></div><article className="examQuestionCard"><span className="examQuestionNumber">{currentExamQuestion.type === "true-false" ? "TRUE / FALSE" : "MULTIPLE CHOICE"} · {currentExamQuestion.points} point{currentExamQuestion.points === 1 ? "" : "s"}</span><h1>{currentExamQuestion.prompt || "Your question will appear here."}</h1><div className="examAnswerList">{currentExamQuestion.options.map((option, index) => { const value = option || `Option ${String.fromCharCode(65 + index)}`; const answerValue = currentExamQuestion.type === "true-false" ? value : String.fromCharCode(65 + index); return <button type="button" key={`${currentExamQuestion.id}-${answerValue}`} className={`examAnswerOption ${examAnswers[currentExamQuestion.id] === answerValue ? "selected" : ""}`} onClick={() => chooseExamAnswer(answerValue)}><span className="examAnswerMarker">{currentExamQuestion.type === "true-false" ? value[0] : String.fromCharCode(65 + index)}</span><span>{value}</span>{examAnswers[currentExamQuestion.id] === answerValue && <Icon name="check" size={16} />}</button>; })}</div></article><div className="examQuestionFooter"><button type="button" className="examNavButton" onClick={() => setExamQuestionIndex((current) => Math.max(0, current - 1))} disabled={examQuestionIndex === 0}><Icon name="arrow" size={15} /> Previous</button><span><Icon name="check" size={13} /> {examAnswers[currentExamQuestion.id] ? "Answer saved" : "Select an answer to save"}</span><button type="button" className="examNavButton next" onClick={() => setExamQuestionIndex((current) => Math.min(examQuestions.length - 1, current + 1))} disabled={examQuestionIndex === examQuestions.length - 1}>Next <Icon name="arrow" size={15} /></button></div></main> : <main className="submissionReceipt"><span className="submissionIcon"><Icon name="check" size={28} /></span><span className="sectionKicker">Submission received</span><h1>Your exam is complete.</h1><p>Your answers were saved for teacher review. The integrity timeline stays explainable: events are shown with context, not automatic accusations.</p><div className="receiptStats"><div><strong>{Object.keys(examAnswers).length}/{examQuestions.length}</strong><span>Answered</span></div><div><strong>{examEventCount}</strong><span>Review events</span></div><div><strong>Pending</strong><span>Teacher review</span></div></div><button type="button" className="receiptButton" onClick={() => { setExamWorkspace(false); setNotice("Submission receipt saved for this demo."); }}>Return home <Icon name="arrow" size={15} /></button></main>}<aside className="examSidebar"><div className="examProgressCard"><div><span className="sectionKicker">Your progress</span><strong>{Object.keys(examAnswers).length} of {examQuestions.length}</strong><small>questions answered</small></div><div className="examProgressRing" style={{ background: `conic-gradient(var(--blue) 0 ${Math.round((Object.keys(examAnswers).length / examQuestions.length) * 100)}%, #e7eef5 ${Math.round((Object.keys(examAnswers).length / examQuestions.length) * 100)}% 100%)` }}><span>{Math.round((Object.keys(examAnswers).length / examQuestions.length) * 100)}%</span></div></div><div className="examQuestionNav"><div className="examSidebarHeading"><strong>Question navigator</strong><small>Blue = answered</small></div><div>{examQuestions.map((question, index) => <button type="button" key={question.id} className={`${examQuestionIndex === index ? "current" : ""} ${examAnswers[question.id] ? "answered" : ""} ${examMarked[question.id] ? "marked" : ""}`} onClick={() => setExamQuestionIndex(index)}>{index + 1}{examMarked[question.id] && <i />}</button>)}</div></div><div className="examCameraCard"><div className="examCameraHead"><strong>Your camera</strong><span><i /> Live</span></div><div className="examMiniCamera"><video ref={cameraVideoRef} className={`cameraVideo ${cameraStream ? "live" : ""}`} autoPlay muted playsInline aria-label="Your live camera preview" />{!cameraStream && <span><Icon name="people" size={24} /> </span>}{orientationDirection !== "center" && orientationCountdown !== null && <span className="cameraOrientationNotice"><Icon name="eye" size={14} /><span><strong>Face camera</strong><small>{formatHeadDirection(orientationDirection)} · {orientationCountdown}s</small></span></span>}</div><small>{orientationCountdown !== null ? "You have time to correct your position." : "Check your framing while you answer."}</small></div><div className="examMonitorStatus"><span className="monitorStatusDot" /><div><strong>Monitoring active</strong><small>Camera connected · {examEventCount} event{examEventCount === 1 ? "" : "s"} recorded</small></div></div><button type="button" className="examSubmitButton" onClick={() => setSubmitConfirm(true)}>Submit exam <Icon name="arrow" size={15} /></button></aside></div>
-            {submitConfirm && <div className="submitConfirmBackdrop"><div className="submitConfirm" role="dialog" aria-modal="true" aria-labelledby="submit-title"><span className="submitConfirmIcon"><Icon name="shield" size={20} /></span><h2 id="submit-title">Submit your exam?</h2><p>You answered {Object.keys(examAnswers).length} of {examQuestions.length} questions. You can return to review unanswered questions before submitting.</p><div><button type="button" className="submitCancel" onClick={() => setSubmitConfirm(false)}>Keep reviewing</button><button type="button" className="submitConfirmButton" onClick={submitExam}>Submit now <Icon name="arrow" size={14} /></button></div></div></div>}
+            <header className="examTopbar">
+<a className="examBrand" href="#top" onClick={() => setExamWorkspace(false)} aria-label="Exit exam workspace">
+<span>EXAM</span>GUARD</a>
+<div className="examTitleBlock">
+<span>EXAM IN PROGRESS</span>
+<strong id="exam-workspace-title">{studentExam?.title || "Web Development Fundamentals"}</strong>
+</div>
+<div className="examTopStatus">
+<span>
+<i /> Monitoring active</span>
+<span>
+<Icon name="people" size={13} /> {studentName || "Student"}</span>
+</div>
+<div className={`examTimer ${examSecondsLeft < 300 ? "urgent" : ""}`}>
+<small>Time left</small>
+<strong>{formatExamTime(examSecondsLeft)}</strong>
+</div>
+<button className="examExit" type="button" onClick={() => setExamWorkspace(false)}>Exit</button>
+</header>
+            {examWarning && <div className="examWarning" role="status">
+<span className="examWarningIcon">
+<Icon name="shield" size={15} />
+</span>
+<div>
+<strong>Monitoring notice</strong>
+<span>{examWarning}</span>
+</div>
+<button type="button" onClick={() => setExamWarning("")} aria-label="Dismiss warning">×</button>
+</div>}
+            {orientationCountdown !== null && orientationDirection !== "center" && <div className="examOrientationBanner" role="status">
+<span>
+<Icon name="eye" size={15} />
+</span>
+<div>
+<strong>Camera guidance</strong>
+<small>Please face the camera · {orientationCountdown}s remaining</small>
+</div>
+</div>}
+            <div className="examBody">{!examSubmitted ? <main className="examMain">
+<div className="examQuestionHeader">
+<div>
+<span className="sectionKicker">Question {String(examQuestionIndex + 1).padStart(2, "0")} of {String(examQuestions.length).padStart(2, "0")}</span>
+<strong>{currentExamQuestion.type === "true-false" ? "True / False" : currentExamQuestion.type === "short-answer" ? "Short answer" : "Multiple choice"}</strong>
+</div>
+<button type="button" className={`examMarkButton ${examMarked[currentExamQuestion.id] ? "marked" : ""}`} onClick={toggleExamMark}>
+<Icon name="spark" size={14} /> {examMarked[currentExamQuestion.id] ? "Marked for review" : "Mark for review"}</button>
+</div>
+<article className="examQuestionCard">
+<span className="examQuestionNumber">{currentExamQuestion.type === "true-false" ? "TRUE / FALSE" : currentExamQuestion.type === "short-answer" ? "SHORT ANSWER" : "MULTIPLE CHOICE"} · {currentExamQuestion.points} point{currentExamQuestion.points === 1 ? "" : "s"}</span>
+<h1>{currentExamQuestion.prompt || "Your question will appear here."}</h1>
+{currentExamQuestion.type === "short-answer" ? <div className="shortAnswerResponse">
+<textarea value={examAnswers[currentExamQuestion.id] ?? ""} onChange={(event) => chooseExamAnswer(limitWords(event.target.value, currentExamQuestion.maxWords ?? 100))} placeholder="Write your answer here..." rows={10} />
+<div><span>{countWords(examAnswers[currentExamQuestion.id] ?? "")} / {currentExamQuestion.maxWords ?? 100} words</span><small>Saved for teacher review · Not automatically scored</small></div>
+</div> : <div className="examAnswerList">{currentExamQuestion.options.map((option, index) => { const value = option || `Option ${String.fromCharCode(65 + index)}`; const answerValue = currentExamQuestion.type === "true-false" ? value : String.fromCharCode(65 + index); return <button type="button" key={`${currentExamQuestion.id}-${answerValue}`} className={`examAnswerOption ${examAnswers[currentExamQuestion.id] === answerValue ? "selected" : ""}`} onClick={() => chooseExamAnswer(answerValue)}>
+<span className="examAnswerMarker">{currentExamQuestion.type === "true-false" ? value[0] : String.fromCharCode(65 + index)}</span>
+<span>{value}</span>{examAnswers[currentExamQuestion.id] === answerValue && <Icon name="check" size={16} />}</button>; })}</div>}
+</article>
+<div className="examQuestionFooter">
+<button type="button" className="examNavButton" onClick={() => setExamQuestionIndex((current) => Math.max(0, current - 1))} disabled={examQuestionIndex === 0}>
+<Icon name="arrow" size={15} /> Previous</button>
+<span>
+<Icon name="check" size={13} /> {examAnswers[currentExamQuestion.id] ? "Answer saved" : currentExamQuestion.type === "short-answer" ? "Write an answer to save" : "Select an answer to save"}</span>
+<button type="button" className="examNavButton next" onClick={() => setExamQuestionIndex((current) => Math.min(examQuestions.length - 1, current + 1))} disabled={examQuestionIndex === examQuestions.length - 1}>Next <Icon name="arrow" size={15} />
+</button>
+</div>
+</main> : <main className="submissionReceipt">
+<span className="submissionIcon">
+<Icon name="check" size={28} />
+</span>
+<span className="sectionKicker">Submission received</span>
+<h1>Your exam is complete.</h1>
+<p>Your answers were saved for teacher review. The integrity timeline stays explainable: events are shown with context, not automatic accusations.</p>
+<div className="receiptStats">
+<div>
+<strong>{Object.keys(examAnswers).length}/{examQuestions.length}</strong>
+<span>Answered</span>
+</div>
+<div>
+<strong>{examEventCount}</strong>
+<span>Review events</span>
+</div>
+<div>
+<strong>Pending</strong>
+<span>Teacher review</span>
+</div>
+</div>
+<button type="button" className="receiptButton" onClick={() => { setExamWorkspace(false); setNotice("Submission receipt saved for this demo."); }}>Return home <Icon name="arrow" size={15} />
+</button>
+</main>}<aside className="examSidebar">
+<div className="examProgressCard">
+<div>
+<span className="sectionKicker">Your progress</span>
+<strong>{Object.keys(examAnswers).length} of {examQuestions.length}</strong>
+<small>questions answered</small>
+</div>
+<div className="examProgressRing" style={{ background: `conic-gradient(var(--blue) 0 ${Math.round((Object.keys(examAnswers).length / examQuestions.length) * 100)}%, #e7eef5 ${Math.round((Object.keys(examAnswers).length / examQuestions.length) * 100)}% 100%)` }}>
+<span>{Math.round((Object.keys(examAnswers).length / examQuestions.length) * 100)}%</span>
+</div>
+</div>
+<div className="examQuestionNav">
+<div className="examSidebarHeading">
+<strong>Question navigator</strong>
+<small>Blue = answered</small>
+</div>
+<div>{examQuestions.map((question, index) => <button type="button" key={question.id} className={`${examQuestionIndex === index ? "current" : ""} ${examAnswers[question.id] ? "answered" : ""} ${examMarked[question.id] ? "marked" : ""}`} onClick={() => setExamQuestionIndex(index)}>{index + 1}{examMarked[question.id] && <i />}</button>)}</div>
+</div>
+<div className="examCameraCard">
+<div className="examCameraHead">
+<strong>Your camera</strong>
+<span>
+<i /> Live</span>
+</div>
+<div className="examMiniCamera">
+<video ref={cameraVideoRef} className={`cameraVideo ${cameraStream ? "live" : ""}`} autoPlay muted playsInline aria-label="Your live camera preview" />{!cameraStream && <span>
+<Icon name="people" size={24} /> </span>}{orientationDirection !== "center" && orientationCountdown !== null && <span className="cameraOrientationNotice">
+<Icon name="eye" size={14} />
+<span>
+<strong>Face camera</strong>
+<small>{formatHeadDirection(orientationDirection)} · {orientationCountdown}s</small>
+</span>
+</span>}</div>
+<small>{orientationCountdown !== null ? "You have time to correct your position." : "Check your framing while you answer."}</small>
+</div>
+<div className="examMonitorStatus">
+<span className="monitorStatusDot" />
+<div>
+<strong>Monitoring active</strong>
+<small>Camera connected · {examEventCount} event{examEventCount === 1 ? "" : "s"} recorded</small>
+</div>
+</div>
+<button type="button" className="examSubmitButton" onClick={() => setSubmitConfirm(true)}>Submit exam <Icon name="arrow" size={15} />
+</button>
+</aside>
+</div>
+            {submitConfirm && <div className="submitConfirmBackdrop">
+<div className="submitConfirm" role="dialog" aria-modal="true" aria-labelledby="submit-title">
+<span className="submitConfirmIcon">
+<Icon name="shield" size={20} />
+</span>
+<h2 id="submit-title">Submit your exam?</h2>
+<p>You answered {Object.keys(examAnswers).length} of {examQuestions.length} questions. You can return to review unanswered questions before submitting.</p>
+<div>
+<button type="button" className="submitCancel" onClick={() => setSubmitConfirm(false)}>Keep reviewing</button>
+<button type="button" className="submitConfirmButton" onClick={submitExam}>Submit now <Icon name="arrow" size={14} />
+</button>
+</div>
+</div>
+</div>}
           </section>
         </div>
       )}
@@ -966,15 +1404,182 @@ export default function Home() {
       {studentFlow && (
         <div className="studentBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setStudentFlow(false); }}>
           <section className="studentFlow" role="dialog" aria-modal="true" aria-labelledby="student-flow-title">
-            <header className="studentHeader"><a className="studentLogo" href="#top" onClick={() => setStudentFlow(false)} aria-label="Return to ExamGuard home"><span>EXAM</span>GUARD</a><div className="studentHeaderCopy"><span>Student mode</span><strong id="student-flow-title">{studentExam?.title || "Web Development Fundamentals"}</strong></div><span className="studentExamCode">Exam {examCode}</span><button className="studentExit" type="button" onClick={() => setStudentFlow(false)}>Exit <Icon name="close" size={15} /></button></header>
-            <div className="studentSteps">{["Join exam", "Monitoring notice", "Device check"].map((label, index) => <div className={`studentStepMarker ${studentStep === index ? "current" : ""} ${studentStep > index ? "complete" : ""}`} key={label}><span>{studentStep > index ? <Icon name="check" size={13} /> : String(index + 1).padStart(2, "0")}</span><strong>{label}</strong></div>)}</div>
-            <div className="studentBody"><aside className="studentAside"><span className="studentAsideIcon"><Icon name={studentStep === 0 ? "people" : studentStep === 1 ? "lock" : "shield"} size={22} /></span><span className="sectionKicker">{studentStep === 0 ? "Welcome" : studentStep === 1 ? "Your privacy matters" : "Almost ready"}</span><h2>{studentStep === 0 ? "Start with your exam details." : studentStep === 1 ? "Know what is monitored before you begin." : "Make sure your device is ready."}</h2><p>{studentStep === 0 ? "You do not need an account. Use the code from your teacher to join." : studentStep === 1 ? "ExamGuard shows objective signals to your teacher. It does not decide whether you cheated." : "A short check helps reduce false alerts caused by camera, browser, or connection problems."}</p><div className="studentAsideNote"><Icon name="lock" size={14} /><span>Your session is connected to this exam code only.</span></div></aside><main className="studentMain">{studentNotice && <div className="studentNotice" role="status"><Icon name="spark" size={14} />{studentNotice}</div>}
-              {studentStep === 0 && <div className="studentPanel"><div className="studentPanelHeading"><div><span className="sectionKicker">Step 01</span><h2>Join your exam</h2></div><span className="studentPanelMeta">No account required</span></div><div className="studentExamSummary"><span className="summaryIcon"><Icon name="chart" size={18} /></span><div><strong>{studentExam?.title || "Web Development Fundamentals"}</strong><small>{studentExam?.subject || "Computer Science"} · {studentExam?.duration || "45"} minutes · Multiple-choice + True/False</small></div><span className="summaryLive">Open</span></div>{studentExam?.instructions && <p className="studentExamInstructions">{studentExam.instructions}</p>}<div className="studentForm"><label>Full name<input value={studentName} onChange={(event) => setStudentName(event.target.value)} placeholder="e.g. Alex Carter" /></label><label>Student ID<input value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="e.g. STU-1042" /></label></div><div className="studentHint"><Icon name="check" size={14} /><span>Your teacher will see this name with your answers and integrity timeline.</span></div></div>}
-              {studentStep === 1 && <div className="studentPanel"><div className="studentPanelHeading"><div><span className="sectionKicker">Step 02</span><h2>Read before you start</h2></div><span className="studentPanelMeta">About 1 minute</span></div><p className="studentLead">During the exam, ExamGuard records a small set of objective events so your teacher can review the session fairly.</p><div className="consentGrid"><div><span className="consentIcon"><Icon name="tab" size={17} /></span><div><strong>Browser events</strong><small>Tab hidden, full-screen exit, copy/paste, and connection changes.</small></div></div><div><span className="consentIcon green"><Icon name="people" size={17} /></span><div><strong>Identity photo</strong><small>One photo is captured during the device check and shown only to the teacher for identity verification.</small></div></div>{studentExam?.monitoring?.headOrientation !== false && <div><span className="consentIcon gold"><Icon name="eye" size={17} /></span><div><strong>Head direction</strong><small>A visible 20-second grace countdown appears before a sustained turn is added to the teacher timeline.</small></div></div>}<div><span className="consentIcon gold"><Icon name="lock" size={17} /></span><div><strong>Teacher review</strong><small>Events are signals with context. A teacher makes the final decision.</small></div></div><div><span className="consentIcon"><Icon name="shield" size={17} /></span><div><strong>Minimal evidence</strong><small>The system stores one identity photo and event metadata, not continuous video.</small></div></div></div><label className="consentCheck"><input type="checkbox" checked={studentConsent} onChange={(event) => setStudentConsent(event.target.checked)} /><span>I understand that one identity photo and monitoring signals will be saved for teacher review.</span></label></div>}
-              {studentStep === 2 && <div className="studentPanel"><div className="studentPanelHeading"><div><span className="sectionKicker">Step 03</span><h2>Check your device</h2></div><span className="studentPanelMeta">5–10 seconds</span></div><div className="deviceCheckTop"><p>Run the quick calibration before entering the exam workspace.</p><button type="button" className="deviceRunButton" onClick={runDeviceCheck} disabled={deviceChecking}>{deviceChecking ? "Checking..." : Object.values(deviceChecks).every(Boolean) ? "Check complete" : cameraStatus === "blocked" ? "Try camera again" : "Allow camera & run check"} <Icon name={deviceChecking ? "spark" : "arrow"} size={14} /></button></div><div className="deviceCheckLayout"><div className="devicePreview"><div className="deviceCameraFrame"><video ref={cameraVideoRef} className={`cameraVideo ${cameraStream ? "live" : ""}`} autoPlay muted playsInline aria-label="Your live camera preview" /><span className="cameraCorner topLeft" /><span className="cameraCorner topRight" /><span className="cameraCorner bottomLeft" /><span className="cameraCorner bottomRight" />{!cameraStream && <span className="cameraSilhouette"><Icon name="people" size={30} /></span>}<span className="cameraLabel">Camera preview</span><small>{deviceChecking ? "Calibrating your view..." : cameraStream ? "Your camera is live" : "Allow access to check your framing"}</small></div><span className="previewPrivacy"><Icon name="lock" size={12} /> Camera status only</span>{cameraError && <span className="cameraError"><Icon name="spark" size={12} /> {cameraError}</span>}</div><div className="deviceCheckList">{[{ key: "camera", icon: "people", label: "Camera connected", copy: "Permission and stream" }, { key: "face", icon: "eye", label: "One face detected", copy: "Visible and centered" }, { key: "lighting", icon: "spark", label: "Lighting acceptable", copy: "Enough light for detection" }, { key: "browser", icon: "tab", label: "Browser supported", copy: "Visibility API available" }, { key: "connection", icon: "chart", label: "Connection stable", copy: "Heartbeat can start" }, { key: "fullscreen", icon: "shield", label: "Full-screen available", copy: "Ready when exam starts" }].map((item) => { const passed = deviceChecks[item.key as keyof typeof deviceChecks]; return <div className={`deviceCheckItem ${passed ? "passed" : ""}`} key={item.key}><span className="deviceCheckIcon"><Icon name={item.icon} size={15} /></span><span><strong>{item.label}</strong><small>{item.copy}</small></span><b>{deviceChecking ? "..." : passed ? "Ready" : "Waiting"}</b></div>; })}</div></div><div className="studentHint"><Icon name="shield" size={14} /><span>Calibration creates a normal baseline for this device. It does not identify you.</span></div></div>}
-            </main></div>
-            {studentStep === 2 && faceMessage && <div className={"studentFaceStatus " + faceStatus} role="status"><Icon name={faceStatus === "ready" ? "check" : faceStatus === "unsupported" ? "spark" : "eye"} size={13} /><span>{faceMessage}</span></div>}
-            <footer className="studentFooter"><button type="button" className="studentBack" onClick={() => studentStep === 0 ? setStudentFlow(false) : setStudentStep((current) => current - 1)}>{studentStep === 0 ? "Cancel" : <><Icon name="arrow" size={14} /> Back</>}</button><div><span className="studentSaveHint">Session starts after the device check</span>{studentStep === 2 ? Object.values(deviceChecks).every(Boolean) ? <button type="button" className="studentPrimary" onClick={finishStudentFlow}>Start exam <Icon name="arrow" size={15} /></button> : <button type="button" className="studentPrimary" onClick={runDeviceCheck} disabled={deviceChecking}>{deviceChecking ? "Checking..." : "Run device check"} <Icon name="spark" size={15} /></button> : <button type="button" className="studentPrimary" onClick={nextStudentStep}>Continue <Icon name="arrow" size={15} /></button>}</div></footer>
+            <header className="studentHeader">
+<a className="studentLogo" href="#top" onClick={() => setStudentFlow(false)} aria-label="Return to ExamGuard home">
+<span>EXAM</span>GUARD</a>
+<div className="studentHeaderCopy">
+<span>Student mode</span>
+<strong id="student-flow-title">{studentExam?.title || "Web Development Fundamentals"}</strong>
+</div>
+<span className="studentExamCode">Exam {examCode}</span>
+<button className="studentExit" type="button" onClick={() => setStudentFlow(false)}>Exit <Icon name="close" size={15} />
+</button>
+</header>
+            <div className="studentSteps">{["Join exam", "Monitoring notice", "Device check"].map((label, index) => <div className={`studentStepMarker ${studentStep === index ? "current" : ""} ${studentStep > index ? "complete" : ""}`} key={label}>
+<span>{studentStep > index ? <Icon name="check" size={13} /> : String(index + 1).padStart(2, "0")}</span>
+<strong>{label}</strong>
+</div>)}</div>
+            <div className="studentBody">
+<aside className="studentAside">
+<span className="studentAsideIcon">
+<Icon name={studentStep === 0 ? "people" : studentStep === 1 ? "lock" : "shield"} size={22} />
+</span>
+<span className="sectionKicker">{studentStep === 0 ? "Welcome" : studentStep === 1 ? "Your privacy matters" : "Almost ready"}</span>
+<h2>{studentStep === 0 ? "Start with your exam details." : studentStep === 1 ? "Know what is monitored before you begin." : "Make sure your device is ready."}</h2>
+<p>{studentStep === 0 ? "You do not need an account. Use the code from your teacher to join." : studentStep === 1 ? "ExamGuard shows objective signals to your teacher. It does not decide whether you cheated." : "A short check helps reduce false alerts caused by camera, browser, or connection problems."}</p>
+<div className="studentAsideNote">
+<Icon name="lock" size={14} />
+<span>Your session is connected to this exam code only.</span>
+</div>
+</aside>
+<main className="studentMain">{studentNotice && <div className="studentNotice" role="status">
+<Icon name="spark" size={14} />{studentNotice}</div>}
+              {studentStep === 0 && <div className="studentPanel">
+<div className="studentPanelHeading">
+<div>
+<span className="sectionKicker">Step 01</span>
+<h2>Join your exam</h2>
+</div>
+<span className="studentPanelMeta">No account required</span>
+</div>
+<div className="studentExamSummary">
+<span className="summaryIcon">
+<Icon name="chart" size={18} />
+</span>
+<div>
+<strong>{studentExam?.title || "Web Development Fundamentals"}</strong>
+<small>{studentExam?.subject || "Computer Science"} · {studentExam?.duration || "45"} minutes · Multiple-choice + True/False</small>
+</div>
+<span className="summaryLive">Open</span>
+</div>{studentExam?.instructions && <p className="studentExamInstructions">{studentExam.instructions}</p>}<div className="studentForm">
+<label>Full name<input value={studentName} onChange={(event) => setStudentName(event.target.value)} placeholder="e.g. Alex Carter" />
+</label>
+<label>Student ID<input value={studentId} onChange={(event) => setStudentId(event.target.value)} placeholder="e.g. STU-1042" />
+</label>
+</div>
+<div className="studentHint">
+<Icon name="check" size={14} />
+<span>Your teacher will see this name with your answers and integrity timeline.</span>
+</div>
+</div>}
+              {studentStep === 1 && <div className="studentPanel">
+<div className="studentPanelHeading">
+<div>
+<span className="sectionKicker">Step 02</span>
+<h2>Read before you start</h2>
+</div>
+<span className="studentPanelMeta">About 1 minute</span>
+</div>
+<p className="studentLead">During the exam, ExamGuard records a small set of objective events so your teacher can review the session fairly.</p>
+<div className="consentGrid">
+<div>
+<span className="consentIcon">
+<Icon name="tab" size={17} />
+</span>
+<div>
+<strong>Browser events</strong>
+<small>Tab hidden, full-screen exit, copy/paste, and connection changes.</small>
+</div>
+</div>
+<div>
+<span className="consentIcon green">
+<Icon name="people" size={17} />
+</span>
+<div>
+<strong>Identity photo</strong>
+<small>One photo is captured during the device check and shown only to the teacher for identity verification.</small>
+</div>
+</div>{studentExam?.monitoring?.headOrientation !== false && <div>
+<span className="consentIcon gold">
+<Icon name="eye" size={17} />
+</span>
+<div>
+<strong>Head direction</strong>
+<small>A visible 20-second grace countdown appears before a sustained turn is added to the teacher timeline.</small>
+</div>
+</div>}<div>
+<span className="consentIcon gold">
+<Icon name="lock" size={17} />
+</span>
+<div>
+<strong>Teacher review</strong>
+<small>Events are signals with context. A teacher makes the final decision.</small>
+</div>
+</div>
+<div>
+<span className="consentIcon">
+<Icon name="shield" size={17} />
+</span>
+<div>
+<strong>Minimal evidence</strong>
+<small>The system stores one identity photo and event metadata, not continuous video.</small>
+</div>
+</div>
+</div>
+<label className="consentCheck">
+<input type="checkbox" checked={studentConsent} onChange={(event) => setStudentConsent(event.target.checked)} />
+<span>I understand that one identity photo and monitoring signals will be saved for teacher review.</span>
+</label>
+</div>}
+              {studentStep === 2 && <div className="studentPanel">
+<div className="studentPanelHeading">
+<div>
+<span className="sectionKicker">Step 03</span>
+<h2>Check your device</h2>
+</div>
+<span className="studentPanelMeta">5–10 seconds</span>
+</div>
+<div className="deviceCheckTop">
+<p>Run the quick calibration before entering the exam workspace.</p>
+<button type="button" className="deviceRunButton" onClick={runDeviceCheck} disabled={deviceChecking}>{deviceChecking ? "Checking..." : Object.values(deviceChecks).every(Boolean) ? "Check complete" : cameraStatus === "blocked" ? "Try camera again" : "Allow camera & run check"} <Icon name={deviceChecking ? "spark" : "arrow"} size={14} />
+</button>
+</div>
+<div className="deviceCheckLayout">
+<div className="devicePreview">
+<div className="deviceCameraFrame">
+<video ref={cameraVideoRef} className={`cameraVideo ${cameraStream ? "live" : ""}`} autoPlay muted playsInline aria-label="Your live camera preview" />
+<span className="cameraCorner topLeft" />
+<span className="cameraCorner topRight" />
+<span className="cameraCorner bottomLeft" />
+<span className="cameraCorner bottomRight" />{!cameraStream && <span className="cameraSilhouette">
+<Icon name="people" size={30} />
+</span>}<span className="cameraLabel">Camera preview</span>
+<small>{deviceChecking ? "Calibrating your view..." : cameraStream ? "Your camera is live" : "Allow access to check your framing"}</small>
+</div>
+<span className="previewPrivacy">
+<Icon name="lock" size={12} /> Camera status only</span>{cameraError && <span className="cameraError">
+<Icon name="spark" size={12} /> {cameraError}</span>}</div>
+<div className="deviceCheckList">{[{ key: "camera", icon: "people", label: "Camera connected", copy: "Permission and stream" }, { key: "face", icon: "eye", label: "One face detected", copy: "Visible and centered" }, { key: "lighting", icon: "spark", label: "Lighting acceptable", copy: "Enough light for detection" }, { key: "browser", icon: "tab", label: "Browser supported", copy: "Visibility API available" }, { key: "connection", icon: "chart", label: "Connection stable", copy: "Heartbeat can start" }, { key: "fullscreen", icon: "shield", label: "Full-screen available", copy: "Ready when exam starts" }].map((item) => { const passed = deviceChecks[item.key as keyof typeof deviceChecks]; return <div className={`deviceCheckItem ${passed ? "passed" : ""}`} key={item.key}>
+<span className="deviceCheckIcon">
+<Icon name={item.icon} size={15} />
+</span>
+<span>
+<strong>{item.label}</strong>
+<small>{item.copy}</small>
+</span>
+<b>{deviceChecking ? "..." : passed ? "Ready" : "Waiting"}</b>
+</div>; })}</div>
+</div>
+<div className="studentHint">
+<Icon name="shield" size={14} />
+<span>Calibration creates a normal baseline for this device. It does not identify you.</span>
+</div>
+</div>}
+            </main>
+</div>
+            {studentStep === 2 && faceMessage && <div className={"studentFaceStatus " + faceStatus} role="status">
+<Icon name={faceStatus === "ready" ? "check" : faceStatus === "unsupported" ? "spark" : "eye"} size={13} />
+<span>{faceMessage}</span>
+</div>}
+            <footer className="studentFooter">
+<button type="button" className="studentBack" onClick={() => studentStep === 0 ? setStudentFlow(false) : setStudentStep((current) => current - 1)}>{studentStep === 0 ? "Cancel" : <>
+<Icon name="arrow" size={14} /> Back</>}</button>
+<div>
+<span className="studentSaveHint">Session starts after the device check</span>{studentStep === 2 ? Object.values(deviceChecks).every(Boolean) ? <button type="button" className="studentPrimary" onClick={finishStudentFlow}>Start exam <Icon name="arrow" size={15} />
+</button> : <button type="button" className="studentPrimary" onClick={runDeviceCheck} disabled={deviceChecking}>{deviceChecking ? "Checking..." : "Run device check"} <Icon name="spark" size={15} />
+</button> : <button type="button" className="studentPrimary" onClick={nextStudentStep}>Continue <Icon name="arrow" size={15} />
+</button>}</div>
+</footer>
           </section>
         </div>
       )}
@@ -983,41 +1588,322 @@ export default function Home() {
         <div className="wizardBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
           <section className="examWizard" role="dialog" aria-modal="true" aria-labelledby="wizard-title">
             <header className="wizardHeader">
-              <a className="wizardLogo" href="#top" onClick={() => setModal(null)} aria-label="Return to ExamGuard home"><span>EXAM</span>GUARD</a>
-              <div className="wizardHeaderCopy"><span className="wizardEyebrow">Teacher mode</span><strong id="wizard-title">Create a new exam</strong></div>
-              <button className="wizardExit" type="button" onClick={() => setModal(null)}>Exit <Icon name="close" size={15} /></button>
+              <a className="wizardLogo" href="#top" onClick={() => setModal(null)} aria-label="Return to ExamGuard home">
+<span>EXAM</span>GUARD</a>
+              <div className="wizardHeaderCopy">
+<span className="wizardEyebrow">Teacher mode</span>
+<strong id="wizard-title">Create a new exam</strong>
+</div>
+              <button className="wizardExit" type="button" onClick={() => setModal(null)}>Exit <Icon name="close" size={15} />
+</button>
             </header>
-            <div className="wizardProgress"><div className="wizardProgressIntro"><div><span className="sectionKicker">Exam setup</span><strong>Build your assessment</strong></div><small>Step {wizardStep + 1} of 4</small></div><div className="wizardSteps">{["Exam details", "Questions", "Monitoring", "Publish"].map((label, index) => <button type="button" key={label} className={`wizardStepMarker ${wizardStep === index ? "current" : ""} ${wizardStep > index ? "complete" : ""}`} onClick={() => index <= wizardStep && setWizardStep(index)} disabled={index > wizardStep}><span>{String(index + 1).padStart(2, "0")}</span><strong>{label}</strong></button>)}</div></div>
+            <div className="wizardProgress">
+<div className="wizardProgressIntro">
+<div>
+<span className="sectionKicker">Exam setup</span>
+<strong>Build your assessment</strong>
+</div>
+<small>Step {wizardStep + 1} of 4</small>
+</div>
+<div className="wizardSteps">{["Exam details", "Questions", "Monitoring", "Publish"].map((label, index) => <button type="button" key={label} className={`wizardStepMarker ${wizardStep === index ? "current" : ""} ${wizardStep > index ? "complete" : ""}`} onClick={() => index <= wizardStep && setWizardStep(index)} disabled={index > wizardStep}>
+<span>{String(index + 1).padStart(2, "0")}</span>
+<strong>{label}</strong>
+</button>)}</div>
+</div>
             <div className="wizardBody">
-              <aside className="wizardAside"><span className="wizardAsideIcon"><Icon name={wizardStep === 1 ? "chart" : wizardStep === 2 ? "shield" : "lock"} size={21} /></span><span className="sectionKicker">{wizardStep === 0 ? "Start with the basics" : wizardStep === 1 ? "Make it yours" : wizardStep === 2 ? "Protect the experience" : "Ready to share"}</span><h2>{wizardStep === 0 ? "A clear beginning makes every exam easier to review." : wizardStep === 1 ? "Keep each question focused and fair." : wizardStep === 2 ? "Use signals as context, never as a verdict." : "Give students a simple path in and teachers a private path back."}</h2><p>{wizardStep === 0 ? "Set the expectations students will see before they begin." : wizardStep === 1 ? "Use multiple-choice and True/False questions for this MVP." : wizardStep === 2 ? "These settings create explainable events for the teacher timeline." : "Review the details once, then publish both access codes."}</p><div className="wizardAsideNote"><Icon name="check" size={14} /><span>No account is needed for this prototype.</span></div></aside>
-              <div className="wizardMain">{wizardNotice && <div className="wizardNotice" role="status"><Icon name="spark" size={14} />{wizardNotice}</div>}
-                {wizardStep === 0 && <div className="wizardPanel"><div className="wizardPanelHeading"><div><span className="sectionKicker">Step 01</span><h2>Tell us about the exam</h2></div><span className="wizardPanelMeta">About 2 minutes</span></div><div className="wizardFormGrid"><label className="wizardField wizardFieldWide">Exam title<input value={examTitle} onChange={(event) => setExamTitle(event.target.value)} placeholder="e.g. Web Development Fundamentals" /></label><label className="wizardField">Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="e.g. Computer Science" /></label><label className="wizardField">Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}><option value="15">15 minutes</option><option value="30">30 minutes</option><option value="45">45 minutes</option><option value="60">60 minutes</option><option value="90">90 minutes</option></select></label><label className="wizardField wizardFieldWide">Instructions<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="Tell students what they should know before they start..." rows={5} /></label></div><div className="wizardHint"><Icon name="lock" size={15} /><span>Students will see these instructions before the monitoring notice and device check.</span></div></div>}
-                {wizardStep === 1 && <div className="wizardPanel questionPanel"><div className="wizardPanelHeading"><div><span className="sectionKicker">Step 02</span><h2>Add your questions</h2></div><span className="wizardPanelMeta">{questions.length} question{questions.length === 1 ? "" : "s"}</span></div><div className="questionBuilder"><aside className="questionList"><div className="questionListHeader"><strong>Question list</strong><button type="button" className="smallAction" onClick={() => addQuestion("multiple-choice")}>+ Add</button></div>{questions.map((question, index) => <button type="button" key={question.id} className={`questionListItem ${activeQuestion === index ? "selected" : ""}`} onClick={() => setActiveQuestion(index)}><span>Q{String(index + 1).padStart(2, "0")}</span><strong>{question.prompt || "Untitled question"}</strong><small>{question.type === "true-false" ? "True / False" : "Multiple choice"}</small></button>)}<div className="questionListFooter"><button type="button" onClick={() => addQuestion("multiple-choice")}>+ Multiple choice</button><button type="button" onClick={() => addQuestion("true-false")}>+ True / False</button></div></aside><div className="questionEditor"><div className="questionEditorTop"><div><span className="sectionKicker">Editing Q{String(activeQuestion + 1).padStart(2, "0")}</span><strong>Question content</strong></div><div className="questionMove"><button type="button" onClick={() => moveQuestion(-1)} disabled={activeQuestion === 0} aria-label="Move question up">↑</button><button type="button" onClick={() => moveQuestion(1)} disabled={activeQuestion === questions.length - 1} aria-label="Move question down">↓</button><button type="button" className="dangerAction" onClick={removeQuestion} aria-label="Delete question">Delete</button></div></div><label className="wizardField">Question text<textarea value={currentQuestion.prompt} onChange={(event) => updateQuestion(currentQuestion.id, { prompt: event.target.value })} placeholder={currentQuestion.type === "true-false" ? "Write a statement students can judge..." : "Write a clear question..."} rows={4} /></label><div className="questionTypeRow"><label className="wizardField">Question type<select value={currentQuestion.type} onChange={(event) => changeQuestionType(event.target.value as QuestionType)}><option value="multiple-choice">Multiple choice</option><option value="true-false">True / False</option></select></label><label className="wizardField pointsField">Points<input type="number" min={1} max={10} value={currentQuestion.points} onChange={(event) => updateQuestion(currentQuestion.id, { points: Math.max(1, Number(event.target.value) || 1) })} /></label></div>{currentQuestion.type === "multiple-choice" ? <div className="optionEditor"><div className="optionEditorHeading"><span className="sectionKicker">Answer options</span><small>Select the correct answer</small></div>{currentQuestion.options.map((option, index) => { const letter = String.fromCharCode(65 + index); return <div className="optionRow" key={`${currentQuestion.id}-${letter}`}><span className="optionLetter">{letter}</span><input value={option} onChange={(event) => updateQuestion(currentQuestion.id, { options: currentQuestion.options.map((item, optionIndex) => optionIndex === index ? event.target.value : item) })} placeholder={`Option ${letter}`} aria-label={`Option ${letter}`} /><label className="correctChoice"><input type="radio" name={`correct-${currentQuestion.id}`} checked={currentQuestion.answer === letter} onChange={() => updateQuestion(currentQuestion.id, { answer: letter })} /> Correct</label>{currentQuestion.options.length > 2 && <button type="button" onClick={() => removeOption(index)} aria-label={`Remove option ${letter}`}>×</button>}</div>; })}<button type="button" className="addOption" onClick={addOption} disabled={currentQuestion.options.length >= 4}>+ Add option</button></div> : <div className="trueFalseChoices"><div className="optionEditorHeading"><span className="sectionKicker">Correct answer</span><small>Choose one</small></div><div>{["True", "False"].map((answer) => <button type="button" key={answer} className={currentQuestion.answer === answer ? "selected" : ""} onClick={() => updateQuestion(currentQuestion.id, { answer })}>{answer}<Icon name={currentQuestion.answer === answer ? "check" : "arrow"} size={15} /></button>)}</div></div>}</div></div></div>}
-                {wizardStep === 2 && <div className="wizardPanel"><div className="wizardPanelHeading"><div><span className="sectionKicker">Step 03</span><h2>Choose monitoring signals</h2></div><span className="wizardPanelMeta">{Object.values(monitoring).filter(Boolean).length} enabled</span></div><p className="wizardLead">ExamGuard records objective events with duration and context. A teacher reviews the final timeline.</p><div className="monitoringGrid">{[{ key: "tabSwitch", icon: "tab", label: "Tab or window exit", copy: "Record when the exam page becomes hidden." }, { key: "fullscreen", icon: "eye", label: "Full-screen exit", copy: "Notice when a student leaves full-screen mode." }, { key: "clipboard", icon: "chart", label: "Copy or paste", copy: "Record browser-reported copy and paste attempts." }, { key: "faceAbsence", icon: "people", label: "Face absence", copy: "Confirm when no face is visible for a sustained period." }, { key: "multipleFaces", icon: "shield", label: "Multiple faces", copy: "Confirm when more than one face persists in frame." }, { key: "headOrientation", icon: "eye", label: "Head orientation", copy: "Show a 20-second warning before recording a sustained left, right, up, or down turn." }, { key: "cameraStopped", icon: "lock", label: "Camera stopped", copy: "Record when the camera stream ends or is blocked." }].map((item) => <label className={`monitorCard ${monitoring[item.key as keyof MonitoringSettings] ? "enabled" : ""}`} key={item.key}><input type="checkbox" checked={monitoring[item.key as keyof MonitoringSettings]} onChange={() => toggleMonitoring(item.key as keyof MonitoringSettings)} /><span className="monitorIcon"><Icon name={item.icon} size={18} /></span><span className="monitorCopy"><strong>{item.label}</strong><small>{item.copy}</small></span><span className="monitorToggle" aria-hidden="true" /></label>)}</div><div className="wizardHint"><Icon name="shield" size={15} /><span>One uncertain frame is never enough to create a high-risk event. Signals are combined before teacher review.</span></div></div>}
-                {wizardStep === 3 && <div className="wizardPanel publishPanel">{!publishedExam ? <><div className="wizardPanelHeading"><div><span className="sectionKicker">Step 04</span><h2>Preview and publish</h2></div><span className="wizardPanelMeta">Final check</span></div><div className="publishPreview"><div className="publishPreviewTop"><div><span className="sectionKicker">Student preview</span><h3>{examTitle || "Untitled exam"}</h3><p>{subject || "No subject"} · {duration} minutes · {questions.length} question{questions.length === 1 ? "" : "s"} · {questions.reduce((total, question) => total + question.points, 0)} total points</p></div><span className="previewBadge"><Icon name="lock" size={13} /> Monitoring ready</span></div>{questions.map((question, index) => <div className="publishPreviewQuestion" key={question.id}><span>Question {String(index + 1).padStart(2, "0")}</span><strong>{question.prompt || "Untitled question"}</strong><div><span>{question.type === "true-false" ? "True / False" : "Multiple choice"}</span><span>{question.points} point{question.points === 1 ? "" : "s"}</span></div></div>)}</div><div className="publishChecklist"><div><Icon name="check" size={14} /><span>Automatic grading for {questions.length} question{questions.length === 1 ? "" : "s"}</span></div><div><Icon name="check" size={14} /><span>{Object.values(monitoring).filter(Boolean).length} integrity signals enabled</span></div><div><Icon name="check" size={14} /><span>Teacher review required for flagged events</span></div></div></> : <div className="publishSuccess"><span className="publishSuccessIcon"><Icon name="check" size={25} /></span><span className="sectionKicker">Exam published</span><h2>Share the student code.</h2><p>Save the private teacher key somewhere safe. It cannot be recovered without an account.</p><div className="accessCards"><div><span>Student exam code</span><strong>{publishedExam.studentCode}</strong><button type="button" onClick={() => copyValue(publishedExam.studentCode, "Student code")}>Copy code</button></div><div><span>Private teacher key</span><strong>{publishedExam.teacherKey}</strong><button type="button" onClick={() => copyValue(publishedExam.teacherKey, "Teacher key")}>Copy key</button></div></div><div className="publishLinks"><span><Icon name="people" size={14} /> Student link: examguard.local/exam/{publishedExam.studentCode}</span><span><Icon name="lock" size={14} /> Teacher link: examguard.local/manage</span></div></div>}</div>}
+              <aside className="wizardAside">
+<span className="wizardAsideIcon">
+<Icon name={wizardStep === 1 ? "chart" : wizardStep === 2 ? "shield" : "lock"} size={21} />
+</span>
+<span className="sectionKicker">{wizardStep === 0 ? "Start with the basics" : wizardStep === 1 ? "Make it yours" : wizardStep === 2 ? "Protect the experience" : "Ready to share"}</span>
+<h2>{wizardStep === 0 ? "A clear beginning makes every exam easier to review." : wizardStep === 1 ? "Keep each question focused and fair." : wizardStep === 2 ? "Use signals as context, never as a verdict." : "Give students a simple path in and teachers a private path back."}</h2>
+<p>{wizardStep === 0 ? "Set the expectations students will see before they begin." : wizardStep === 1 ? "Use multiple-choice and True/False questions for this MVP." : wizardStep === 2 ? "These settings create explainable events for the teacher timeline." : "Review the details once, then publish both access codes."}</p>
+<div className="wizardAsideNote">
+<Icon name="check" size={14} />
+<span>No account is needed for this prototype.</span>
+</div>
+</aside>
+              <div className="wizardMain">{wizardNotice && <div className="wizardNotice" role="status">
+<Icon name="spark" size={14} />{wizardNotice}</div>}
+                {wizardStep === 0 && <div className="wizardPanel">
+<div className="wizardPanelHeading">
+<div>
+<span className="sectionKicker">Step 01</span>
+<h2>Tell us about the exam</h2>
+</div>
+<span className="wizardPanelMeta">About 2 minutes</span>
+</div>
+<div className="wizardFormGrid">
+<label className="wizardField wizardFieldWide">Exam title<input value={examTitle} onChange={(event) => setExamTitle(event.target.value)} placeholder="e.g. Web Development Fundamentals" />
+</label>
+<label className="wizardField">Subject<input value={subject} onChange={(event) => setSubject(event.target.value)} placeholder="e.g. Computer Science" />
+</label>
+<label className="wizardField">Duration<select value={duration} onChange={(event) => setDuration(event.target.value)}>
+<option value="15">15 minutes</option>
+<option value="30">30 minutes</option>
+<option value="45">45 minutes</option>
+<option value="60">60 minutes</option>
+<option value="90">90 minutes</option>
+</select>
+</label>
+<label className="wizardField wizardFieldWide">Instructions<textarea value={instructions} onChange={(event) => setInstructions(event.target.value)} placeholder="Tell students what they should know before they start..." rows={5} />
+</label>
+</div>
+<div className="wizardHint">
+<Icon name="lock" size={15} />
+<span>Students will see these instructions before the monitoring notice and device check.</span>
+</div>
+</div>}
+                {wizardStep === 1 && <div className="wizardPanel questionPanel">
+<div className="wizardPanelHeading">
+<div>
+<span className="sectionKicker">Step 02</span>
+<h2>Add your questions</h2>
+</div>
+<span className="wizardPanelMeta">{questions.length} question{questions.length === 1 ? "" : "s"}</span>
+</div>
+<div className="questionBuilder">
+<aside className="questionList">
+<div className="questionListHeader">
+<strong>Question list</strong>
+<button type="button" className="smallAction" onClick={() => addQuestion("multiple-choice")}>+ Add</button>
+</div>{questions.map((question, index) => <button type="button" key={question.id} className={`questionListItem ${activeQuestion === index ? "selected" : ""}`} onClick={() => setActiveQuestion(index)}>
+<span>Q{String(index + 1).padStart(2, "0")}</span>
+<strong>{question.prompt || "Untitled question"}</strong>
+<small>{question.type === "true-false" ? "True / False" : question.type === "short-answer" ? "Short answer" : "Multiple choice"}</small>
+</button>)}<div className="questionListFooter">
+<button type="button" onClick={() => addQuestion("multiple-choice")}>+ Multiple choice</button>
+<button type="button" onClick={() => addQuestion("true-false")}>+ True / False</button>
+<button type="button" onClick={() => addQuestion("short-answer")}>+ Short answer</button>
+</div>
+</aside>
+<div className="questionEditor">
+<div className="questionEditorTop">
+<div>
+<span className="sectionKicker">Editing Q{String(activeQuestion + 1).padStart(2, "0")}</span>
+<strong>Question content</strong>
+</div>
+<div className="questionMove">
+<button type="button" onClick={() => moveQuestion(-1)} disabled={activeQuestion === 0} aria-label="Move question up">↑</button>
+<button type="button" onClick={() => moveQuestion(1)} disabled={activeQuestion === questions.length - 1} aria-label="Move question down">↓</button>
+<button type="button" className="dangerAction" onClick={removeQuestion} aria-label="Delete question">Delete</button>
+</div>
+</div>
+<label className="wizardField">Question text<textarea value={currentQuestion.prompt} onChange={(event) => updateQuestion(currentQuestion.id, { prompt: event.target.value })} placeholder={currentQuestion.type === "true-false" ? "Write a statement students can judge..." : currentQuestion.type === "short-answer" ? "Write a question students answer in their own words..." : "Write a clear question..."} rows={4} />
+</label>
+<div className="questionTypeRow">
+<label className="wizardField">Question type<select value={currentQuestion.type} onChange={(event) => changeQuestionType(event.target.value as QuestionType)}>
+<option value="multiple-choice">Multiple choice</option>
+<option value="true-false">True / False</option>
+<option value="short-answer">Short answer</option>
+</select>
+</label>
+<label className="wizardField pointsField">Points<input type="number" min={1} max={100} value={currentQuestion.points} onChange={(event) => updateQuestion(currentQuestion.id, { points: Math.max(1, Number(event.target.value) || 1) })} />
+</label>
+</div>{currentQuestion.type === "multiple-choice" ? <div className="optionEditor">
+<div className="optionEditorHeading">
+<span className="sectionKicker">Answer options</span>
+<small>Select the correct answer</small>
+</div>{currentQuestion.options.map((option, index) => { const letter = String.fromCharCode(65 + index); return <div className="optionRow" key={`${currentQuestion.id}-${letter}`}>
+<span className="optionLetter">{letter}</span>
+<input value={option} onChange={(event) => updateQuestion(currentQuestion.id, { options: currentQuestion.options.map((item, optionIndex) => optionIndex === index ? event.target.value : item) })} placeholder={`Option ${letter}`} aria-label={`Option ${letter}`} />
+<label className="correctChoice">
+<input type="radio" name={`correct-${currentQuestion.id}`} checked={currentQuestion.answer === letter} onChange={() => updateQuestion(currentQuestion.id, { answer: letter })} /> Correct</label>{currentQuestion.options.length > 2 && <button type="button" onClick={() => removeOption(index)} aria-label={`Remove option ${letter}`}>×</button>}</div>; })}<button type="button" className="addOption" onClick={addOption} disabled={currentQuestion.options.length >= 4}>+ Add option</button>
+</div> : currentQuestion.type === "true-false" ? <div className="trueFalseChoices">
+<div className="optionEditorHeading">
+<span className="sectionKicker">Correct answer</span>
+<small>Choose one</small>
+</div>
+<div>{["True", "False"].map((answer) => <button type="button" key={answer} className={currentQuestion.answer === answer ? "selected" : ""} onClick={() => updateQuestion(currentQuestion.id, { answer })}>{answer}<Icon name={currentQuestion.answer === answer ? "check" : "arrow"} size={15} />
+</button>)}</div>
+</div> : <div className="shortAnswerSettings">
+<label className="wizardField">Maximum words<input type="number" min={10} max={1000} value={currentQuestion.maxWords ?? 100} onChange={(event) => updateQuestion(currentQuestion.id, { maxWords: Math.min(1000, Math.max(10, Number(event.target.value) || 100)) })} />
+</label>
+<div className="manualMarkingNote">
+<Icon name="people" size={16} />
+<span>
+<strong>Teacher-reviewed response</strong>
+<small>ExamGuard saves the answer but does not score it. Return the mark to the student outside this system.</small>
+</span>
+</div>
+</div>}</div>
+</div>
+</div>}
+                {wizardStep === 2 && <div className="wizardPanel">
+<div className="wizardPanelHeading">
+<div>
+<span className="sectionKicker">Step 03</span>
+<h2>Choose monitoring signals</h2>
+</div>
+<span className="wizardPanelMeta">{Object.values(monitoring).filter(Boolean).length} enabled</span>
+</div>
+<p className="wizardLead">ExamGuard records objective events with duration and context. A teacher reviews the final timeline.</p>
+<div className="monitoringGrid">{[{ key: "tabSwitch", icon: "tab", label: "Tab or window exit", copy: "Record when the exam page becomes hidden." }, { key: "fullscreen", icon: "eye", label: "Full-screen exit", copy: "Notice when a student leaves full-screen mode." }, { key: "clipboard", icon: "chart", label: "Copy or paste", copy: "Record browser-reported copy and paste attempts." }, { key: "faceAbsence", icon: "people", label: "Face absence", copy: "Confirm when no face is visible for a sustained period." }, { key: "multipleFaces", icon: "shield", label: "Multiple faces", copy: "Confirm when more than one face persists in frame." }, { key: "headOrientation", icon: "eye", label: "Head orientation", copy: "Show a 20-second warning before recording a sustained left, right, up, or down turn." }, { key: "cameraStopped", icon: "lock", label: "Camera stopped", copy: "Record when the camera stream ends or is blocked." }].map((item) => <label className={`monitorCard ${monitoring[item.key as keyof MonitoringSettings] ? "enabled" : ""}`} key={item.key}>
+<input type="checkbox" checked={monitoring[item.key as keyof MonitoringSettings]} onChange={() => toggleMonitoring(item.key as keyof MonitoringSettings)} />
+<span className="monitorIcon">
+<Icon name={item.icon} size={18} />
+</span>
+<span className="monitorCopy">
+<strong>{item.label}</strong>
+<small>{item.copy}</small>
+</span>
+<span className="monitorToggle" aria-hidden="true" />
+</label>)}</div>
+<div className="wizardHint">
+<Icon name="shield" size={15} />
+<span>One uncertain frame is never enough to create a high-risk event. Signals are combined before teacher review.</span>
+</div>
+</div>}
+                {wizardStep === 3 && <div className="wizardPanel publishPanel">{!publishedExam ? <>
+<div className="wizardPanelHeading">
+<div>
+<span className="sectionKicker">Step 04</span>
+<h2>Preview and publish</h2>
+</div>
+<span className="wizardPanelMeta">Final check</span>
+</div>
+<div className="publishPreview">
+<div className="publishPreviewTop">
+<div>
+<span className="sectionKicker">Student preview</span>
+<h3>{examTitle || "Untitled exam"}</h3>
+<p>{subject || "No subject"} · {duration} minutes · {questions.length} question{questions.length === 1 ? "" : "s"} · {questions.reduce((total, question) => total + question.points, 0)} total points</p>
+</div>
+<span className="previewBadge">
+<Icon name="lock" size={13} /> Monitoring ready</span>
+</div>{questions.map((question, index) => <div className="publishPreviewQuestion" key={question.id}>
+<span>Question {String(index + 1).padStart(2, "0")}</span>
+<strong>{question.prompt || "Untitled question"}</strong>
+<div>
+<span>{question.type === "true-false" ? "True / False" : question.type === "short-answer" ? `Short answer · ${question.maxWords ?? 100} words` : "Multiple choice"}</span>
+<span>{question.points} point{question.points === 1 ? "" : "s"}</span>
+</div>
+</div>)}</div>
+<div className="publishChecklist">
+<div>
+<Icon name="check" size={14} />
+<span>Automatic grading for {questions.filter((question) => question.type !== "short-answer").length} question{questions.filter((question) => question.type !== "short-answer").length === 1 ? "" : "s"}</span>
+</div>
+{questions.some((question) => question.type === "short-answer") && <div>
+<Icon name="people" size={14} />
+<span>Manual teacher review for {questions.filter((question) => question.type === "short-answer").length} short answer{questions.filter((question) => question.type === "short-answer").length === 1 ? "" : "s"}</span>
+</div>}
+<div>
+<Icon name="check" size={14} />
+<span>{Object.values(monitoring).filter(Boolean).length} integrity signals enabled</span>
+</div>
+<div>
+<Icon name="check" size={14} />
+<span>Teacher review required for flagged events</span>
+</div>
+</div>
+</> : <div className="publishSuccess">
+<span className="publishSuccessIcon">
+<Icon name="check" size={25} />
+</span>
+<span className="sectionKicker">Exam published</span>
+<h2>Share the student code.</h2>
+<p>Save the private teacher key somewhere safe. It cannot be recovered without an account.</p>
+<div className="accessCards">
+<div>
+<span>Student exam code</span>
+<strong>{publishedExam.studentCode}</strong>
+<button type="button" onClick={() => copyValue(publishedExam.studentCode, "Student code")}>Copy code</button>
+</div>
+<div>
+<span>Private teacher key</span>
+<strong>{publishedExam.teacherKey}</strong>
+<button type="button" onClick={() => copyValue(publishedExam.teacherKey, "Teacher key")}>Copy key</button>
+</div>
+</div>
+<div className="publishLinks">
+<span>
+<Icon name="people" size={14} /> Student link: examguard.local/exam/{publishedExam.studentCode}</span>
+<span>
+<Icon name="lock" size={14} /> Teacher link: examguard.local/manage</span>
+</div>
+</div>}</div>}
               </div>
             </div>
-            <footer className="wizardFooter"><button type="button" className="wizardBack" onClick={() => wizardStep === 0 ? setModal(null) : setWizardStep((current) => current - 1)}>{wizardStep === 0 ? "Cancel" : <><Icon name="arrow" size={14} /> Back</>}</button><div><span className="wizardSaveHint">Draft stays in this session</span>{publishedExam ? <button type="button" className="wizardPrimary" onClick={() => setModal(null)}>Finish <Icon name="check" size={15} /></button> : wizardStep === 3 ? <button type="button" className="wizardPrimary" onClick={publishExam}>Publish exam <Icon name="arrow" size={15} /></button> : <button type="button" className="wizardPrimary" onClick={nextWizardStep}>Continue <Icon name="arrow" size={15} /></button>}</div></footer>
+            <footer className="wizardFooter">
+<button type="button" className="wizardBack" onClick={() => wizardStep === 0 ? setModal(null) : setWizardStep((current) => current - 1)}>{wizardStep === 0 ? "Cancel" : <>
+<Icon name="arrow" size={14} /> Back</>}</button>
+<div>
+<span className="wizardSaveHint">Draft stays in this session</span>{publishedExam ? <button type="button" className="wizardPrimary" onClick={() => setModal(null)}>Finish <Icon name="check" size={15} />
+</button> : wizardStep === 3 ? <button type="button" className="wizardPrimary" onClick={publishExam}>Publish exam <Icon name="arrow" size={15} />
+</button> : <button type="button" className="wizardPrimary" onClick={nextWizardStep}>Continue <Icon name="arrow" size={15} />
+</button>}</div>
+</footer>
           </section>
         </div>
       )}
 
-      {notice && <button className="toast" onClick={() => setNotice("")}><span><Icon name="check" size={13} /></span>{notice}<b>×</b></button>}
+      {notice && <button className="toast" onClick={() => setNotice("")}>
+<span>
+<Icon name="check" size={13} />
+</span>{notice}<b>×</b>
+</button>}
 
       <section className="homeHero" id="top">
-        <div className="heroLight heroLightOne" /><div className="heroLight heroLightTwo" />
+        <div className="heroLight heroLightOne" />
+<div className="heroLight heroLightTwo" />
         <div className="heroMessage" data-reveal="left">
-          <span className="heroEyebrow"><Icon name="spark" size={13} /> Explainable online exam monitoring</span>
-          <h1>Fair online exams.<br /><em>Clearer decisions.</em></h1>
-          <p>Create multiple-choice and True/False exams, automatically grade student answers, and review suspicious events with context.</p>
-          <div className="heroProof"><span><Icon name="shield" size={14} /> Signals, not accusations.</span><span><Icon name="lock" size={14} /> No account needed for the MVP.</span></div>
+          <span className="heroEyebrow">
+<Icon name="spark" size={13} /> Explainable online exam monitoring</span>
+          <h1>Fair online exams.<br />
+<em>Clearer decisions.</em>
+</h1>
+<p>Create MCQ, True/False, and word-limited short-answer exams. Objective questions are auto-graded; teachers manually review short answers and integrity signals.</p>
+          <div className="heroProof">
+<span>
+<Icon name="shield" size={14} /> Signals, not accusations.</span>
+<span>
+<Icon name="lock" size={14} /> No account needed for the MVP.</span>
+</div>
         </div>
 
         <div className="entryPanel" data-reveal="right" aria-label="Choose how to start">
-          <div className="entryHeader"><div><span className="sectionKicker">Start here</span><h2>What brings you to ExamGuard?</h2></div></div>
+          <div className="entryHeader">
+<div>
+<span className="sectionKicker">Start here</span>
+<h2>What brings you to ExamGuard?</h2>
+</div>
+</div>
           <div className="entryCards">
-            <article className="roleCard teacherCard" data-reveal><div className="roleTop"><span className="roleIcon"><Icon name="chart" size={20} /></span><span className="roleLabel">For teachers</span></div><h3>Run your next exam</h3><p>Create a new assessment or return to an exam you already published.</p><div className="roleActions"><button onClick={startCreateWizard}>Create new exam <Icon name="arrow" size={14} /></button><button className="softAction" onClick={() => setModal("manage")}>Manage existing <Icon name="arrow" size={14} /></button></div></article>
-            <article className="roleCard studentCard" data-reveal><div className="roleTop"><span className="roleIcon"><Icon name="people" size={20} /></span><span className="roleLabel">For students</span></div><h3>Join an exam</h3><p>Enter the six-digit code provided by your teacher. No account required.</p><label className="codeLabel" htmlFor="exam-code">Exam code</label><div className="joinRow"><input id="exam-code" inputMode="numeric" maxLength={6} value={examCode} onChange={(event) => { setExamCode(event.target.value.replace(/\D/g, "")); setStudentNotice(""); }} placeholder="_ _ _ _ _ _" aria-describedby="join-help" /><button onClick={joinExam} aria-label="Join exam"><Icon name="arrow" size={16} /></button></div><small id="join-help" className={studentNotice ? "joinHelp error" : "joinHelp"}>{studentNotice || "You can enter the code now or come back later."}</small></article>
+            <article className="roleCard teacherCard" data-reveal>
+<div className="roleTop">
+<span className="roleIcon">
+<Icon name="chart" size={20} />
+</span>
+<span className="roleLabel">For teachers</span>
+</div>
+<h3>Run your next exam</h3>
+<p>Create a new assessment or return to an exam you already published.</p>
+<div className="roleActions">
+<button onClick={startCreateWizard}>Create new exam <Icon name="arrow" size={14} />
+</button>
+<button className="softAction" onClick={() => setModal("manage")}>Manage existing <Icon name="arrow" size={14} />
+</button>
+</div>
+</article>
+            <article className="roleCard studentCard" data-reveal>
+<div className="roleTop">
+<span className="roleIcon">
+<Icon name="people" size={20} />
+</span>
+<span className="roleLabel">For students</span>
+</div>
+<h3>Join an exam</h3>
+<p>Enter the six-digit code provided by your teacher. No account required.</p>
+<label className="codeLabel" htmlFor="exam-code">Exam code</label>
+<div className="joinRow">
+<input id="exam-code" inputMode="numeric" maxLength={6} value={examCode} onChange={(event) => { setExamCode(event.target.value.replace(/\D/g, "")); setStudentNotice(""); }} placeholder="_ _ _ _ _ _" aria-describedby="join-help" />
+<button onClick={joinExam} aria-label="Join exam">
+<Icon name="arrow" size={16} />
+</button>
+</div>
+<small id="join-help" className={studentNotice ? "joinHelp error" : "joinHelp"}>{studentNotice || "You can enter the code now or come back later."}</small>
+</article>
           </div>
         </div>
       </section>
@@ -1025,9 +1911,12 @@ export default function Home() {
       <section className="previewStrip">
         <div className="previewCopy" data-reveal="left">
           <span className="sectionKicker">Made for real classrooms</span>
-          <h2>A calmer experience,<br /><em>for everyone.</em></h2>
+          <h2>A calmer experience,<br />
+<em>for everyone.</em>
+</h2>
           <p>Students get a friendly, focused exam experience while teachers keep the context they need to review fairly.</p>
-          <a href="#how-it-works">Explore the flow <Icon name="arrow" size={14} /></a>
+          <a href="#how-it-works">Explore the flow <Icon name="arrow" size={14} />
+</a>
         </div>
         <div className="previewWindow previewArtwork" data-reveal="right">
           <div
@@ -1038,33 +1927,200 @@ export default function Home() {
         </div>
       </section>
 
-      <section className="stepsSection" id="how-it-works"><div className="sectionHeading" data-reveal><div><span className="sectionKicker">How ExamGuard works</span><h2>From first click<br /><em>to final review.</em></h2></div><p>Designed around the moments teachers and students actually experience.</p></div><div className="stepGrid"><article data-reveal><span className="stepNumber">01</span><span className="stepIcon blueStep"><Icon name="chart" size={19} /></span><h3>Create</h3><p>Add exam details, multiple-choice questions, and True/False questions.</p><a href="#top" onClick={startCreateWizard}>Create an exam <Icon name="arrow" size={13} /></a></article><article data-reveal><span className="stepNumber">02</span><span className="stepIcon navyStep"><Icon name="eye" size={19} /></span><h3>Conduct</h3><p>Students join with a code, complete a device check, and take the exam.</p><a href="#top">See student flow <Icon name="arrow" size={13} /></a></article><article data-reveal><span className="stepNumber">03</span><span className="stepIcon goldStep"><Icon name="shield" size={19} /></span><h3>Review</h3><p>See automatic scores and understandable integrity events in one timeline.</p><a href="#detection">Explore detection <Icon name="arrow" size={13} /></a></article></div></section>
+      <section className="stepsSection" id="how-it-works">
+<div className="sectionHeading" data-reveal>
+<div>
+<span className="sectionKicker">How ExamGuard works</span>
+<h2>From first click<br />
+<em>to final review.</em>
+</h2>
+</div>
+<p>Designed around the moments teachers and students actually experience.</p>
+</div>
+<div className="stepGrid">
+<article data-reveal>
+<span className="stepNumber">01</span>
+<span className="stepIcon blueStep">
+<Icon name="chart" size={19} />
+</span>
+<h3>Create</h3>
+<p>Add exam details, multiple-choice questions, and True/False questions.</p>
+<a href="#top" onClick={startCreateWizard}>Create an exam <Icon name="arrow" size={13} />
+</a>
+</article>
+<article data-reveal>
+<span className="stepNumber">02</span>
+<span className="stepIcon navyStep">
+<Icon name="eye" size={19} />
+</span>
+<h3>Conduct</h3>
+<p>Students join with a code, complete a device check, and take the exam.</p>
+<a href="#top">See student flow <Icon name="arrow" size={13} />
+</a>
+</article>
+<article data-reveal>
+<span className="stepNumber">03</span>
+<span className="stepIcon goldStep">
+<Icon name="shield" size={19} />
+</span>
+<h3>Review</h3>
+<p>See automatic scores and understandable integrity events in one timeline.</p>
+<a href="#detection">Explore detection <Icon name="arrow" size={13} />
+</a>
+</article>
+</div>
+</section>
 
-      <section className="detectionSection" id="detection"><div className="sectionHeading detectionHeading" data-reveal><div><span className="sectionKicker">Built for meaningful signals</span><h2>Notice the moment.<br /><em>Keep the context.</em></h2></div><p>ExamGuard never treats one uncertain event as proof. It combines duration, confidence, and related signals for teacher review.</p></div><div className="detectionGrid"><article data-reveal><span className="detectIcon"><Icon name="tab" size={20} /></span><h3>Browser focus</h3><p>Know when the exam tab becomes hidden or the student leaves full-screen mode.</p></article><article data-reveal><span className="detectIcon detectGreen"><Icon name="eye" size={20} /></span><h3>Camera presence</h3><p>Detect sustained face absence, multiple faces, and camera interruptions.</p></article><article data-reveal><span className="detectIcon detectGold"><Icon name="chart" size={20} /></span><h3>Review priority</h3><p>See low, medium, or high priority events with timestamps and durations.</p></article><article data-reveal><span className="detectIcon detectNavy"><Icon name="lock" size={20} /></span><h3>Human decision</h3><p>Classify events as valid concern, false detection, technical issue, or acceptable.</p></article></div></section>
+      <section className="detectionSection" id="detection">
+<div className="sectionHeading detectionHeading" data-reveal>
+<div>
+<span className="sectionKicker">Built for meaningful signals</span>
+<h2>Notice the moment.<br />
+<em>Keep the context.</em>
+</h2>
+</div>
+<p>ExamGuard never treats one uncertain event as proof. It combines duration, confidence, and related signals for teacher review.</p>
+</div>
+<div className="detectionGrid">
+<article data-reveal>
+<span className="detectIcon">
+<Icon name="tab" size={20} />
+</span>
+<h3>Browser focus</h3>
+<p>Know when the exam tab becomes hidden or the student leaves full-screen mode.</p>
+</article>
+<article data-reveal>
+<span className="detectIcon detectGreen">
+<Icon name="eye" size={20} />
+</span>
+<h3>Camera presence</h3>
+<p>Detect sustained face absence, multiple faces, and camera interruptions.</p>
+</article>
+<article data-reveal>
+<span className="detectIcon detectGold">
+<Icon name="chart" size={20} />
+</span>
+<h3>Review priority</h3>
+<p>See low, medium, or high priority events with timestamps and durations.</p>
+</article>
+<article data-reveal>
+<span className="detectIcon detectNavy">
+<Icon name="lock" size={20} />
+</span>
+<h3>Human decision</h3>
+<p>Classify events as valid concern, false detection, technical issue, or acceptable.</p>
+</article>
+</div>
+</section>
 
       <section className="trustSection" id="trust">
         <div className="trustCard" data-reveal="scale">
           <div className="trustIntro" data-reveal="left">
-            <span className="trustIcon"><Icon name="lock" size={21} /></span>
+            <span className="trustIcon">
+<Icon name="lock" size={21} />
+</span>
             <div className="trustCopy">
               <span className="sectionKicker">Trust & privacy</span>
-              <h2>Visibility without<br /><em>unnecessary surveillance.</em></h2>
+              <h2>Visibility without<br />
+<em>unnecessary surveillance.</em>
+</h2>
               <p>Students see what is monitored before they begin. Teachers receive evidence and context, not automatic accusations.</p>
             </div>
           </div>
           <div className="trustPoints" data-reveal="right" aria-label="ExamGuard privacy principles">
-            <article><span className="trustPointIcon"><Icon name="check" size={15} /></span><div><strong>Clear consent</strong><small>Students know what is monitored before the exam begins.</small></div></article>
-            <article><span className="trustPointIcon"><Icon name="check" size={15} /></span><div><strong>Minimal evidence</strong><small>Only useful review context is kept and presented.</small></div></article>
-            <article><span className="trustPointIcon"><Icon name="check" size={15} /></span><div><strong>Teacher review</strong><small>A person—not an automated score—makes the final decision.</small></div></article>
+            <article>
+<span className="trustPointIcon">
+<Icon name="check" size={15} />
+</span>
+<div>
+<strong>Clear consent</strong>
+<small>Students know what is monitored before the exam begins.</small>
+</div>
+</article>
+            <article>
+<span className="trustPointIcon">
+<Icon name="check" size={15} />
+</span>
+<div>
+<strong>Minimal evidence</strong>
+<small>Only useful review context is kept and presented.</small>
+</div>
+</article>
+            <article>
+<span className="trustPointIcon">
+<Icon name="check" size={15} />
+</span>
+<div>
+<strong>Teacher review</strong>
+<small>A person—not an automated score—makes the final decision.</small>
+</div>
+</article>
           </div>
         </div>
       </section>
 
-      <section className="finalSection"><span className="sectionKicker" data-reveal>Start with one exam</span><h2 data-reveal>Make your next assessment<br /><em>feel a little clearer.</em></h2><p data-reveal>Create an exam, share a code, and see the complete flow end to end.</p><div data-reveal><button className="primaryCta" onClick={startCreateWizard}>Create new exam <Icon name="arrow" size={15} /></button><button className="secondaryCta" onClick={() => document.getElementById("exam-code")?.focus()}>Join with a code <Icon name="arrow" size={15} /></button></div></section>
+      <section className="finalSection">
+<span className="sectionKicker" data-reveal>Start with one exam</span>
+<h2 data-reveal>Make your next assessment<br />
+<em>feel a little clearer.</em>
+</h2>
+<p data-reveal>Create an exam, share a code, and see the complete flow end to end.</p>
+<div data-reveal>
+<button className="primaryCta" onClick={startCreateWizard}>Create new exam <Icon name="arrow" size={15} />
+</button>
+<button className="secondaryCta" onClick={() => document.getElementById("exam-code")?.focus()}>Join with a code <Icon name="arrow" size={15} />
+</button>
+</div>
+</section>
 
-      <footer className="homeFooter"><div><a className="homeLogo" href="#top"><span className="wordmarkText"><span className="wordmarkExam">EXAM</span><span className="wordmarkGuard">GUARD</span></span></a><p>Integrity, made clearer.<br />For teachers and students.</p></div><div className="footerLinks"><a href="#how-it-works">How it works</a><a href="#detection">Detection</a><a href="#trust">Trust & privacy</a><a href="#top">Teacher guide</a></div><div className="footerBottom"><span>© 2024 ExamGuard prototype</span><span>Evidence over verdicts.</span></div></footer>
+      <footer className="homeFooter">
+<div>
+<a className="homeLogo" href="#top">
+<span className="wordmarkText">
+<span className="wordmarkExam">EXAM</span>
+<span className="wordmarkGuard">GUARD</span>
+</span>
+</a>
+<p>Integrity, made clearer.<br />For teachers and students.</p>
+</div>
+<div className="footerLinks">
+<a href="#how-it-works">How it works</a>
+<a href="#detection">Detection</a>
+<a href="#trust">Trust & privacy</a>
+<a href="#top">Teacher guide</a>
+</div>
+<div className="footerBottom">
+<span>© 2024 ExamGuard prototype</span>
+<span>Evidence over verdicts.</span>
+</div>
+</footer>
 
-      {modal && <div className="modalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}><section className="startModal" role="dialog" aria-modal="true" aria-labelledby="modal-title"><button className="modalClose" onClick={() => setModal(null)} aria-label="Close"><Icon name="close" size={17} /></button><span className="modalIcon"><Icon name={modal === "create" ? "chart" : "lock"} size={23} /></span><span className="sectionKicker">{modal === "create" ? "Teacher mode" : "Returning teacher"}</span><h2 id="modal-title">{modal === "create" ? "Create a new exam" : "Manage an existing exam"}</h2><p>{modal === "create" ? "Start with the basics. You can add your questions and monitoring settings next." : "Use the exam code and private teacher key from when you published the exam."}</p>{modal === "create" ? <div className="modalFields"><label>Exam title<input placeholder="e.g. Web Development Fundamentals" /></label><label>Subject<input placeholder="e.g. Computer Science" /></label><button className="modalPrimary" onClick={() => { setModal(null); setNotice("Exam draft created. Next step: add your questions."); }}>Continue to exam details <Icon name="arrow" size={15} /></button></div> : <div className="modalFields"><label>Exam code<input inputMode="numeric" maxLength={6} value={manageExamCode} onChange={(event) => { setManageExamCode(event.target.value.replace(/\D/g, "")); setManageError(""); }} placeholder="6-digit code" /></label><label>Private teacher key<input value={manageTeacherKey} onChange={(event) => { setManageTeacherKey(event.target.value.toUpperCase()); setManageError(""); }} placeholder="e.g. K7P9-X2RM" /></label>{manageError && <span className="modalError" role="alert"><Icon name="spark" size={13} /> {manageError}</span>}<button className="modalPrimary" onClick={openTeacherDashboard}>Open teacher dashboard <Icon name="arrow" size={15} /></button></div>}</section></div>}
+      {modal && <div className="modalBackdrop" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setModal(null); }}>
+<section className="startModal" role="dialog" aria-modal="true" aria-labelledby="modal-title">
+<button className="modalClose" onClick={() => setModal(null)} aria-label="Close">
+<Icon name="close" size={17} />
+</button>
+<span className="modalIcon">
+<Icon name={modal === "create" ? "chart" : "lock"} size={23} />
+</span>
+<span className="sectionKicker">{modal === "create" ? "Teacher mode" : "Returning teacher"}</span>
+<h2 id="modal-title">{modal === "create" ? "Create a new exam" : "Manage an existing exam"}</h2>
+<p>{modal === "create" ? "Start with the basics. You can add your questions and monitoring settings next." : "Use the exam code and private teacher key from when you published the exam."}</p>{modal === "create" ? <div className="modalFields">
+<label>Exam title<input placeholder="e.g. Web Development Fundamentals" />
+</label>
+<label>Subject<input placeholder="e.g. Computer Science" />
+</label>
+<button className="modalPrimary" onClick={() => { setModal(null); setNotice("Exam draft created. Next step: add your questions."); }}>Continue to exam details <Icon name="arrow" size={15} />
+</button>
+</div> : <div className="modalFields">
+<label>Exam code<input inputMode="numeric" maxLength={6} value={manageExamCode} onChange={(event) => { setManageExamCode(event.target.value.replace(/\D/g, "")); setManageError(""); }} placeholder="6-digit code" />
+</label>
+<label>Private teacher key<input value={manageTeacherKey} onChange={(event) => { setManageTeacherKey(event.target.value.toUpperCase()); setManageError(""); }} placeholder="e.g. K7P9-X2RM" />
+</label>{manageError && <span className="modalError" role="alert">
+<Icon name="spark" size={13} /> {manageError}</span>}<button className="modalPrimary" onClick={openTeacherDashboard}>Open teacher dashboard <Icon name="arrow" size={15} />
+</button>
+</div>}</section>
+</div>}
     </main>
   );
 }
