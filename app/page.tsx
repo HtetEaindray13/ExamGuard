@@ -88,6 +88,48 @@ function formatHeadDirection(direction: HeadDirection): string {
   return direction === "center" ? "facing the camera" : `turned ${direction}`;
 }
 
+function analyzeCameraFrame(video: HTMLVideoElement, previous: Uint8ClampedArray | null) {
+  const canvas = document.createElement("canvas");
+  canvas.width = 160;
+  canvas.height = Math.max(90, Math.round((video.videoHeight / video.videoWidth) * canvas.width));
+  const context = canvas.getContext("2d", { willReadFrequently: true });
+  if (!context) return null;
+  context.drawImage(video, 0, 0, canvas.width, canvas.height);
+  const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+  const luminance = new Uint8ClampedArray(canvas.width * canvas.height);
+  for (let pixel = 0, index = 0; pixel < pixels.length; pixel += 4, index += 1) {
+    luminance[index] = Math.round((pixels[pixel] * 0.299) + (pixels[pixel + 1] * 0.587) + (pixels[pixel + 2] * 0.114));
+  }
+  let motion = previous ? 0 : Number.POSITIVE_INFINITY;
+  if (previous) {
+    for (let index = 0; index < luminance.length; index += 1) motion += Math.abs(luminance[index] - previous[index]);
+    motion /= luminance.length;
+  }
+  let laplacianSum = 0;
+  let laplacianSquaredSum = 0;
+  let sampleCount = 0;
+  for (let y = 1; y < canvas.height - 1; y += 1) {
+    for (let x = 1; x < canvas.width - 1; x += 1) {
+      const index = (y * canvas.width) + x;
+      const value = (luminance[index] * 4) - luminance[index - 1] - luminance[index + 1] - luminance[index - canvas.width] - luminance[index + canvas.width];
+      laplacianSum += value;
+      laplacianSquaredSum += value * value;
+      sampleCount += 1;
+    }
+  }
+  const mean = laplacianSum / sampleCount;
+  const sharpness = (laplacianSquaredSum / sampleCount) - (mean * mean);
+  return { luminance, motion, sharpness };
+}
+
+function captureCameraPhoto(video: HTMLVideoElement) {
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.min(720, video.videoWidth);
+  canvas.height = Math.round((video.videoHeight / video.videoWidth) * canvas.width);
+  canvas.getContext("2d")?.drawImage(video, 0, 0, canvas.width, canvas.height);
+  return canvas.toDataURL("image/jpeg", 0.82);
+}
+
 function readLocal<T>(key: string, fallback: T): T {
   if (typeof window === "undefined") return fallback;
   try {
@@ -628,24 +670,39 @@ export default function Home() {
     setDeviceChecking(true);
     setStudentNotice("");
     const cameraReady = await requestCamera();
-    window.setTimeout(() => {
-      let photoCaptured = false;
-      if (cameraReady) {
-        const video = cameraVideoRef.current;
-        if (video?.videoWidth && video.videoHeight) {
-          const canvas = document.createElement("canvas");
-          const width = 480;
-          const height = Math.round((video.videoHeight / video.videoWidth) * width);
-          canvas.width = width;
-          canvas.height = height;
-          canvas.getContext("2d")?.drawImage(video, 0, 0, width, height);
-          setIdentityPhoto(canvas.toDataURL("image/jpeg", 0.72));
-          photoCaptured = true;
+    let photo: string | null = null;
+    if (cameraReady) {
+      await new Promise((resolve) => window.setTimeout(resolve, 650));
+      const video = cameraVideoRef.current;
+      if (video?.videoWidth && video.videoHeight) {
+        let previous: Uint8ClampedArray | null = null;
+        let stableFrames = 0;
+        let bestSharpness = 0;
+        for (let sample = 0; sample < 14; sample += 1) {
+          const analysis = analyzeCameraFrame(video, previous);
+          if (analysis) {
+            const stable = analysis.motion < 8.5;
+            const sharp = analysis.sharpness > 55;
+            stableFrames = stable && sharp ? stableFrames + 1 : 0;
+            if (stableFrames >= 2 && analysis.sharpness > bestSharpness) {
+              photo = captureCameraPhoto(video);
+              bestSharpness = analysis.sharpness;
+            }
+            previous = analysis.luminance;
+          }
+          await new Promise((resolve) => window.setTimeout(resolve, 180));
         }
       }
-      setDeviceChecks({ camera: cameraReady, face: cameraReady && photoCaptured, lighting: cameraReady, browser: true, connection: true, fullscreen: true });
-      setDeviceChecking(false);
-    }, 900);
+    }
+    if (photo) {
+      setIdentityPhoto(photo);
+      setCameraError("");
+    } else if (cameraReady) {
+      setIdentityPhoto(null);
+      setCameraError("Photo was blurry. Face the camera, hold still for a moment, then run the check again.");
+    }
+    setDeviceChecks({ camera: cameraReady, face: Boolean(photo), lighting: cameraReady, browser: true, connection: true, fullscreen: true });
+    setDeviceChecking(false);
   }
 
   function finishStudentFlow() {
