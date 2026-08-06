@@ -1180,10 +1180,6 @@ export default function Home() {
 {answer.questionType === "short-answer" ? <div className="shortAnswerReview">
 <small>Student response · {countWords(answer.student)} / {answer.maxWords ?? 100} words</small>
 <p>{answer.student}</p>
-<div className="aiAuthorshipNotice">
-<strong>AI authorship: Not determinable</strong>
-<span>No detector can reliably prove whether an answer was AI-generated. Review the response and objective session signals, such as paste attempts.</span>
-</div>
 <em>Teacher review required · Return marks outside ExamGuard</em>
 </div> : <div className="answerComparison">
 <div>
