@@ -1315,6 +1315,7 @@ export default function Home() {
 <button type="button" className="examNavButton next" onClick={() => setExamQuestionIndex((current) => Math.min(examQuestions.length - 1, current + 1))} disabled={examQuestionIndex === examQuestions.length - 1}>Next <Icon name="arrow" size={15} />
 </button>
 </div>
+<button type="button" className="mobileExamSubmitButton" onClick={() => setSubmitConfirm(true)}>Submit exam <Icon name="arrow" size={16} /></button>
 </main> : <main className="submissionReceipt">
 <span className="submissionIcon">
 <Icon name="check" size={28} />
