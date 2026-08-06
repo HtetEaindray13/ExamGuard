@@ -92,7 +92,9 @@ const LOCAL_MEDIAPIPE_WASM_PATH = "/mediapipe/wasm";
 const LOCAL_FACE_LANDMARKER_MODEL_PATH = "/mediapipe/models/face_landmarker.task";
 const CDN_MEDIAPIPE_WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
 const CDN_FACE_LANDMARKER_MODEL_PATH = "https://storage.googleapis.com/mediapipe-models/face_landmarker/face_landmarker/float16/1/face_landmarker.task";
-const HEAD_ORIENTATION_GRACE_MS = 20_000;
+const HEAD_ORIENTATION_GRACE_MS = 10_000;
+const HEAD_YAW_THRESHOLD_DEGREES = 10;
+const HEAD_PITCH_THRESHOLD_DEGREES = 8;
 
 function readHeadPose(data?: number[]): HeadPose | null {
   if (!data || data.length < 11) return null;
@@ -106,8 +108,8 @@ function classifyHeadDirection(pose: HeadPose, baseline: HeadPose): HeadDirectio
   const pitch = pose.pitch - baseline.pitch;
   const yawMagnitude = Math.abs(yaw);
   const pitchMagnitude = Math.abs(pitch);
-  if (Math.max(yawMagnitude, pitchMagnitude) < 18) return "center";
-  if (yawMagnitude >= pitchMagnitude) return yaw > 0 ? "right" : "left";
+  if (yawMagnitude < HEAD_YAW_THRESHOLD_DEGREES && pitchMagnitude < HEAD_PITCH_THRESHOLD_DEGREES) return "center";
+  if ((yawMagnitude / HEAD_YAW_THRESHOLD_DEGREES) >= (pitchMagnitude / HEAD_PITCH_THRESHOLD_DEGREES)) return yaw > 0 ? "right" : "left";
   // MediaPipe's transformation matrix uses the opposite vertical sign from
   // the direction a person experiences on screen: positive relative pitch
   // means the face has moved upward (the student is looking up).
@@ -187,7 +189,7 @@ function makeIntegrityEvent(type: string, detail: string, overrides: Partial<Int
     "camera-stopped": { label: "Camera interrupted", level: "High", icon: "lock", confidence: 99, source: "Camera", duration: "Until recovered" },
     "face-absent": { label: "Face absent", level: "Medium", icon: "eye", confidence: 85, source: "Camera", duration: "3+ seconds" },
     "multiple-faces": { label: "Multiple faces", level: "High", icon: "people", confidence: 90, source: "Camera", duration: "2+ seconds" },
-    "head-turned": { label: "Head orientation", level: "Medium", icon: "eye", confidence: 82, source: "Camera", duration: "20+ seconds" },
+    "head-turned": { label: "Head orientation", level: "Medium", icon: "eye", confidence: 82, source: "Camera", duration: "10+ seconds" },
     "demo-face-absent": { label: "Face absence (demo)", level: "High", icon: "eye", confidence: 86, source: "Demo", duration: "12 seconds" },
     "demo-multiple-faces": { label: "Multiple faces (demo)", level: "High", icon: "people", confidence: 89, source: "Demo", duration: "6 seconds" },
     "demo-camera-interruption": { label: "Camera interruption (demo)", level: "High", icon: "lock", confidence: 96, source: "Demo", duration: "8 seconds" },
@@ -217,7 +219,7 @@ const demoSubmissions: Submission[] = [
       { label: "Tab hidden", detail: "Exam page was not visible in the browser.", time: "10:28:04 AM", duration: "9 seconds", level: "Medium", icon: "tab" },
       { label: "Multiple faces detected", detail: "More than one face persisted in frame.", time: "10:42:09 AM", duration: "4 seconds", level: "Medium", icon: "people" },
       { label: "Copy attempt", detail: "Browser reported a copy action.", time: "10:43:26 AM", duration: "1 second", level: "Low", icon: "chart" },
-      { label: "Head turned right", detail: "The student looked away for the full 20-second grace period.", time: "10:44:10 AM", duration: "20 seconds", level: "Medium", icon: "eye", confidence: 82, source: "Camera", direction: "right", startTime: "10:44:10 AM", endTime: "10:44:30 AM" },
+      { label: "Head turned right", detail: "The student looked away for the full 10-second grace period.", time: "10:44:10 AM", duration: "10 seconds", level: "Medium", icon: "eye", confidence: 82, source: "Camera", direction: "right", startTime: "10:44:10 AM", endTime: "10:44:20 AM" },
       { label: "Camera briefly interrupted", detail: "The stream paused and recovered.", time: "10:45:02 AM", duration: "8 seconds", level: "High", icon: "lock" },
     ],
   },
@@ -498,9 +500,9 @@ export default function Home() {
               const startTimestamp = Date.now() - Math.round(elapsed);
               const startTime = new Date(startTimestamp).toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
               const endTime = new Date().toLocaleTimeString([], { hour: "numeric", minute: "2-digit", second: "2-digit" });
-              recordIntegrityEvent(makeIntegrityEvent("head-turned", `The student looked ${direction} for at least 20 seconds. Review the complete session context before deciding.`, {
+              recordIntegrityEvent(makeIntegrityEvent("head-turned", `The student looked ${direction} for at least 10 seconds. Review the complete session context before deciding.`, {
                 label: `Head turned ${direction}`,
-                duration: `${Math.max(20, Math.round(elapsed / 1000))} seconds`,
+                duration: `${Math.max(10, Math.round(elapsed / 1000))} seconds`,
                 confidence: Math.round(orientationStateRef.current.confidence || frame.confidence || 82),
                 direction,
                 startTime,
@@ -1497,7 +1499,7 @@ export default function Home() {
 </span>
 <div>
 <strong>Head direction</strong>
-<small>A visible 20-second grace countdown appears before a sustained turn is added to the teacher timeline.</small>
+<small>A visible 10-second grace countdown appears before a sustained turn is added to the teacher timeline.</small>
 </div>
 </div>}<div>
 <span className="consentIcon gold">
@@ -1740,7 +1742,7 @@ export default function Home() {
 <span className="wizardPanelMeta">{Object.values(monitoring).filter(Boolean).length} enabled</span>
 </div>
 <p className="wizardLead">ExamGuard records objective events with duration and context. A teacher reviews the final timeline.</p>
-<div className="monitoringGrid">{[{ key: "tabSwitch", icon: "tab", label: "Tab or window exit", copy: "Record when the exam page becomes hidden." }, { key: "fullscreen", icon: "eye", label: "Full-screen exit", copy: "Notice when a student leaves full-screen mode." }, { key: "clipboard", icon: "chart", label: "Copy or paste", copy: "Record browser-reported copy and paste attempts." }, { key: "faceAbsence", icon: "people", label: "Face absence", copy: "Confirm when no face is visible for a sustained period." }, { key: "multipleFaces", icon: "shield", label: "Multiple faces", copy: "Confirm when more than one face persists in frame." }, { key: "headOrientation", icon: "eye", label: "Head orientation", copy: "Show a 20-second warning before recording a sustained left, right, up, or down turn." }, { key: "cameraStopped", icon: "lock", label: "Camera stopped", copy: "Record when the camera stream ends or is blocked." }].map((item) => <label className={`monitorCard ${monitoring[item.key as keyof MonitoringSettings] ? "enabled" : ""}`} key={item.key}>
+<div className="monitoringGrid">{[{ key: "tabSwitch", icon: "tab", label: "Tab or window exit", copy: "Record when the exam page becomes hidden." }, { key: "fullscreen", icon: "eye", label: "Full-screen exit", copy: "Notice when a student leaves full-screen mode." }, { key: "clipboard", icon: "chart", label: "Copy or paste", copy: "Record browser-reported copy and paste attempts." }, { key: "faceAbsence", icon: "people", label: "Face absence", copy: "Confirm when no face is visible for a sustained period." }, { key: "multipleFaces", icon: "shield", label: "Multiple faces", copy: "Confirm when more than one face persists in frame." }, { key: "headOrientation", icon: "eye", label: "Head orientation", copy: "Show a 10-second warning before recording a sustained small left, right, up, or down turn." }, { key: "cameraStopped", icon: "lock", label: "Camera stopped", copy: "Record when the camera stream ends or is blocked." }].map((item) => <label className={`monitorCard ${monitoring[item.key as keyof MonitoringSettings] ? "enabled" : ""}`} key={item.key}>
 <input type="checkbox" checked={monitoring[item.key as keyof MonitoringSettings]} onChange={() => toggleMonitoring(item.key as keyof MonitoringSettings)} />
 <span className="monitorIcon">
 <Icon name={item.icon} size={18} />
