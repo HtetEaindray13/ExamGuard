@@ -248,8 +248,14 @@ function countWords(value: string) {
 }
 
 function limitWords(value: string, maximum: number) {
-  const words = value.match(/\S+\s*/g) ?? [];
-  return words.slice(0, maximum).join("").trimEnd();
+  if (countWords(value) <= maximum) return value;
+  const words = value.matchAll(/\S+/g);
+  let wordNumber = 0;
+  for (const word of words) {
+    wordNumber += 1;
+    if (wordNumber > maximum) return value.slice(0, word.index);
+  }
+  return value;
 }
 
 const demoExamQuestions: ExamQuestion[] = [
