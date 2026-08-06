@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 
 export const metadata: Metadata = {
   title: "ExamGuard · Integrity, made clearer",
-  description: "A calm, evidence-first workspace for online exam integrity.",
+  description: "A thoughtful online exam integrity platform for teachers and students.",
   icons: {
     icon: "/favicon.svg",
     shortcut: "/favicon.svg",
