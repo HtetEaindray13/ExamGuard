@@ -1,3 +1,4 @@
+import { env } from "cloudflare:workers";
 import { and, eq } from "drizzle-orm";
 import { ensureDatabase, getDb } from "../../../db";
 import { exams, submissions } from "../../../db/schema";
@@ -7,6 +8,14 @@ type StoredExam = { id: string; studentCode: string; teacherKey: string; created
 function publicExam(exam: StoredExam) {
   const { teacherKey: _teacherKey, ...safeExam } = exam;
   return safeExam;
+}
+
+function bytesToBase64(bytes: Uint8Array) {
+  let binary = "";
+  for (let index = 0; index < bytes.length; index += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(index, index + 0x8000));
+  }
+  return btoa(binary);
 }
 
 export async function GET(request: Request) {
@@ -26,7 +35,14 @@ export async function GET(request: Request) {
     if (row.teacherKey !== teacherKey) return Response.json({ error: "The teacher key is incorrect." }, { status: 403 });
 
     const submissionRows = await db.select().from(submissions).where(eq(submissions.examCode, code));
-    return Response.json({ exam, submissions: submissionRows.map((item) => JSON.parse(item.payload)) });
+    const teacherSubmissions = await Promise.all(submissionRows.map(async (item) => {
+      const submission = JSON.parse(item.payload) as Record<string, unknown> & { photoKey?: string };
+      if (!submission.photoKey) return submission;
+      const photo = await env.PHOTOS.get(submission.photoKey);
+      if (!photo) return submission;
+      return { ...submission, photo: `data:${photo.httpMetadata?.contentType || "image/jpeg"};base64,${bytesToBase64(new Uint8Array(await photo.arrayBuffer()))}` };
+    }));
+    return Response.json({ exam, submissions: teacherSubmissions });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Database request failed." }, { status: 500 });
   }

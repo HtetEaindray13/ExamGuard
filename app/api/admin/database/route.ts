@@ -49,10 +49,16 @@ export async function DELETE(request: Request) {
 
   const db = getDb();
   if (payload.table === "submissions") {
+    const [submission] = await db.select({ payload: submissions.payload }).from(submissions).where(eq(submissions.id, payload.id)).limit(1);
+    const photoKey = submission ? parsePayload(submission.payload).photoKey : null;
+    if (typeof photoKey === "string") await env.PHOTOS.delete(photoKey);
     await db.delete(submissions).where(eq(submissions.id, payload.id));
   } else {
     const [exam] = await db.select({ code: exams.studentCode }).from(exams).where(eq(exams.id, payload.id)).limit(1);
     if (exam) {
+      const linkedSubmissions = await db.select({ payload: submissions.payload }).from(submissions).where(eq(submissions.examCode, exam.code));
+      const photoKeys = linkedSubmissions.map((item) => parsePayload(item.payload).photoKey).filter((key): key is string => typeof key === "string");
+      if (photoKeys.length) await env.PHOTOS.delete(photoKeys);
       await db.delete(submissions).where(eq(submissions.examCode, exam.code));
       await db.delete(exams).where(eq(exams.id, payload.id));
     }
