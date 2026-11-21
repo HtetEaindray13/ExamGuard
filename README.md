@@ -1,92 +1,168 @@
-# vinext-starter
+# ExamGuard
 
-A clean full-stack starter running on
-[vinext](https://github.com/cloudflare/vinext), with optional Cloudflare D1 and
-Drizzle support.
+ExamGuard is a full-stack online examination platform for creating, conducting, and reviewing monitored assessments. It gives teachers useful integrity context while keeping the final decision with a human—not an automated cheating verdict.
 
-## Prerequisites
+![ExamGuard classroom preview](public/examguard-classroom.png)
+
+## What it does
+
+### For teachers
+
+- Create exams with multiple-choice, True/False, and word-limited short-answer questions.
+- Set instructions, duration, points, and monitoring signals.
+- Publish an exam with a six-digit student code and a private teacher key.
+- View submissions with scores, risk priority, identity photo, answers, and an integrity timeline.
+- Classify integrity events as valid concern, false detection, technical issue, or acceptable.
+
+### For students
+
+- Join an exam with a teacher-provided code.
+- Read the monitoring notice and give consent before the device check.
+- Check camera, face visibility, lighting, browser, connection, and full-screen readiness.
+- Complete the exam in a focused workspace with visible progress and time remaining.
+- Receive neutral guidance when the camera or browser state needs attention.
+- Submit answers and receive a completion confirmation.
+
+## Monitoring approach
+
+Teachers can enable or disable these signals for each exam:
+
+- Exam tab becomes hidden
+- Full-screen mode is exited
+- Copy or paste is attempted
+- Face is absent for a sustained period
+- Multiple faces are visible
+- Camera stream is interrupted
+- Head orientation stays outside the expected direction after a grace period
+
+ExamGuard records explainable events with timestamps, duration, priority, source, and confidence/context. A single uncertain frame is not treated as proof. Students are informed about monitoring before the exam begins, and the final integrity classification remains a teacher decision.
+
+The browser performs face analysis with MediaPipe assets. The application stores one identity photo and contextual event metadata; it does not store continuous video.
+
+## Tech stack
+
+- React 19 and TypeScript
+- vinext / Next.js-style App Router
+- Vite
+- Cloudflare Workers
+- Cloudflare D1 with Drizzle ORM
+- Cloudflare R2 for identity photos
+- MediaPipe Tasks Vision for face landmarks and presence checks
+- Google OAuth with signed HTTP-only sessions
+- CSS-based responsive UI
+
+## Project structure
+
+```text
+app/                  Pages, layouts, dashboards, and API routes
+  api/                Authentication, exams, submissions, reviews, and profile APIs
+  dashboard/          Teacher and student dashboards
+  login/              Google OAuth login flow
+db/                   Drizzle schema and database access helpers
+drizzle/              Generated SQL migrations
+public/mediapipe/     Local MediaPipe WASM and face landmark model assets
+worker/               Cloudflare Worker entry point
+tests/                Rendered HTML smoke test
+.openai/hosting.json  Cloudflare D1 and R2 binding names
+```
+
+## Requirements
 
 - Node.js `>=22.13.0`
+- npm
+- A Cloudflare D1 database for account-backed persistence
+- A Cloudflare R2 bucket for identity photos when running with production bindings
+- Google OAuth credentials for Google login
 
-## Quick Start
+## Run locally
+
+1. Install dependencies:
+
+   ```bash
+   npm install
+   ```
+
+2. Create local environment variables:
+
+   ```bash
+   copy .dev.vars.example .dev.vars
+   ```
+
+   Set `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, and a long random `AUTH_SECRET` in `.dev.vars`.
+
+3. Add this callback URL to the Google OAuth web client:
+
+   ```text
+   http://localhost:3000/api/auth/google/callback
+   ```
+
+4. Start the development server:
+
+   ```bash
+   npm run dev
+   ```
+
+Open the local URL shown by vinext. In local development, the app has a development session fallback when `AUTH_SECRET` is not configured, but Google login still requires the OAuth variables above.
+
+## Useful commands
 
 ```bash
-npm install
-npm run dev
-npm run build
+npm run dev          # Start the local development server
+npm run build        # Build the application
+npm start            # Start the built application
+npm test             # Build and run the rendered HTML smoke test
+npm run lint         # Run ESLint
+npm run db:generate  # Generate a Drizzle migration after schema changes
 ```
 
-This starter does not use `wrangler.jsonc`.
+## Cloudflare bindings
 
-## Included Shape
+The application expects these bindings:
 
-- edit site code under `app/`
-- `.openai/hosting.json` declares optional Sites D1 and R2 bindings
-- `vite.config.ts` simulates declared bindings for local development
-- `db/schema.ts` starts intentionally empty
-- `examples/d1/` contains an optional D1 example surface
-- `drizzle.config.ts` supports local migration generation when needed
+| Binding | Service | Purpose |
+| --- | --- | --- |
+| `DB` | Cloudflare D1 | Users, exams, submissions, and review records |
+| `PHOTOS` | Cloudflare R2 | Identity photo storage |
 
-## Workspace Auth Headers
+They are declared in `.openai/hosting.json` for the current project. Local development uses the Vite/Cloudflare configuration in `vite.config.ts` and the Worker entry point in `worker/index.ts`.
 
-Signed-in visitors receive both `oai-authenticated-user-id` and `oai-authenticated-user-email`. Private Sites require every visitor to sign in; public Sites may also have anonymous visitors, for whom neither header is present.
+The database schema is defined in `db/schema.ts`. Generated migrations are stored in `drizzle/`. Apply migrations using the Cloudflare/Wrangler workflow configured for your environment before relying on account-backed data.
 
-The user ID is stable for the same user on the same Site and different across Sites. Email and name are intended for display or contact purposes.
+## Authentication and roles
 
-SIWC-authenticated workspace sites may also receive
-`oai-authenticated-user-full-name` when the user's SIWC profile has a non-empty
-`name` claim. The full-name value is percent-encoded UTF-8 and is accompanied by
-`oai-authenticated-user-full-name-encoding: percent-encoded-utf-8`.
+ExamGuard uses Google OAuth and a signed `examguard_session` cookie. After login, a user chooses a role:
 
-Treat the full name as optional and fall back to email when it is absent:
+- `teacher`: create exams and review submissions
+- `student`: join exams and view submission history
 
-```tsx
-import { headers } from "next/headers";
+Teacher and student dashboard routes require authentication. The private teacher key is required to reopen a published exam and should be stored securely; the current MVP does not provide key recovery.
 
-export default async function Home() {
-  const requestHeaders = await headers();
-  const userId = requestHeaders.get("oai-authenticated-user-id");
-  const email = requestHeaders.get("oai-authenticated-user-email");
-  const encodedFullName = requestHeaders.get("oai-authenticated-user-full-name");
-  const fullName =
-    encodedFullName &&
-    requestHeaders.get("oai-authenticated-user-full-name-encoding") ===
-      "percent-encoded-utf-8"
-      ? decodeURIComponent(encodedFullName)
-      : null;
+## Data model
 
-  const displayName = fullName ?? email;
-  // ...
-}
-```
+The main D1 tables are:
 
-## ExamGuard authentication
+- `users`: account profile, role, student ID, and organization
+- `exams`: exam access credentials, lifecycle status, and serialized exam payload
+- `submissions`: student answers, score, identity photo reference, and integrity events
+- `submission_reviews`: teacher integrity classification, feedback, and manual score
 
-ExamGuard uses its own signed session and supports Google OAuth.
+## Current MVP boundaries
 
-To enable Google login locally:
+- Students and teachers use authenticated accounts for dashboards; the exam access flow still uses a student code and teacher key.
+- Multiple-choice and True/False questions are auto-graded.
+- Short answers are saved for teacher review and are not fully graded automatically.
+- The teacher must retain the private teacher key; there is no recovery flow yet.
+- Browser and camera signals are review context, not automatic failure decisions.
+- Local browser storage can supplement account-backed records when the shared database is unavailable, but publishing requires the shared database.
 
-1. Copy `.dev.vars.example` to `.dev.vars`.
-2. Add a Google OAuth web client ID and client secret.
-3. Set `AUTH_SECRET` to a long random value.
-4. Add `http://localhost:3000/api/auth/google/callback` as an authorized Google
-   redirect URI (adjust the port if the dev server chooses another one).
-5. Restart `npm.cmd run dev`.
+## Privacy and fairness principles
 
-The header shows **Log in** while signed out. After authentication it changes to
-the user's Google profile photo, with links to the profile page and logout.
+1. Explain monitoring before it starts.
+2. Use signals to provide context, not automatic accusations.
+3. Give students neutral guidance and a chance to correct their setup.
+4. Keep evidence proportional: one identity photo and contextual events instead of continuous video.
+5. Keep the final integrity decision with a teacher.
 
-Use SIWC for account pages, user-specific dashboards, saved records, and write
-actions tied to the current ChatGPT user. Leave public content anonymous.
+## License
 
-## Useful Commands
-
-- `npm run dev`: start local development
-- `npm run build`: verify the vinext build output
-- `npm test`: build the starter and verify its rendered loading skeleton
-- `npm run db:generate`: generate Drizzle migrations after schema changes
-
-## Learn More
-
-- [vinext Documentation](https://github.com/cloudflare/vinext)
-- [Drizzle D1 Guide](https://orm.drizzle.team/docs/get-started/d1-new)
+No license has been declared for this repository yet. Add a `LICENSE` file before distributing ExamGuard publicly.
