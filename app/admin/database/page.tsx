@@ -1,5 +1,5 @@
 import { env } from "cloudflare:workers";
-import { requireChatGPTUser } from "../../chatgpt-auth";
+import { requireAuthUser } from "../../auth";
 import DatabaseAdmin from "./database-admin";
 import "./admin.css";
 
@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 type AdminEnv = { ADMIN_EMAIL?: string };
 
 export default async function DatabaseAdminPage() {
-  const user = await requireChatGPTUser("/admin/database");
+  const user = await requireAuthUser("/admin/database");
   const adminEmail = (env as unknown as AdminEnv).ADMIN_EMAIL?.trim().toLowerCase();
   const authorized = Boolean(adminEmail && user.email.toLowerCase() === adminEmail);
 

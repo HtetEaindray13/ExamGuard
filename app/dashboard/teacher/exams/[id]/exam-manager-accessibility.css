@@ -1,0 +1,19 @@
+.managerQuestionTop button,
+.managerOptions > button {
+  min-height: 44px;
+}
+
+.managerOptions > div > button {
+  width: 44px;
+  height: 44px;
+  display: grid;
+  place-items: center;
+}
+
+@media (max-width: 800px) {
+  .examEditorCard input,
+  .examEditorCard textarea,
+  .examEditorCard select {
+    font-size: 16px;
+  }
+}

@@ -1,0 +1,112 @@
+.resultNotice.followUp {
+  color: #805f31;
+  background: #fff5e3;
+  border-color: #efd9ad;
+}
+
+.resultNotice.followUp svg {
+  color: #a87327;
+}
+
+.teacherFeedback {
+  margin-top: 15px;
+  padding: 24px;
+  background: #fff;
+  border: 1px solid #dce6ed;
+  border-radius: 14px;
+}
+
+.teacherFeedback h2 {
+  margin: 6px 0 12px;
+  color: var(--navy);
+  font: 600 23px 'Outfit', sans-serif;
+}
+
+.teacherFeedback p {
+  margin: 0;
+  color: #526b80;
+  font-size: 13px;
+  line-height: 1.65;
+  white-space: pre-wrap;
+}
+
+.teacherFeedback small {
+  display: block;
+  margin-top: 15px;
+  padding-top: 13px;
+  color: #71879a;
+  border-top: 1px solid #e5ecf1;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.examFilters {
+  display: flex;
+  gap: 8px;
+  margin-top: 22px;
+  overflow-x: auto;
+}
+
+.examFilters a {
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 0 13px;
+  color: #60778b;
+  background: #f7fafc;
+  border: 1px solid #d7e2e9;
+  border-radius: 999px;
+  font-size: 11px;
+  font-weight: 800;
+  white-space: nowrap;
+  transition: background 180ms ease, border-color 180ms ease;
+}
+
+.examFilters a span {
+  min-width: 21px;
+  height: 21px;
+  display: inline-grid;
+  place-items: center;
+  color: #71879a;
+  background: #e7eef3;
+  border-radius: 999px;
+  font-size: 9px;
+}
+
+.examFilters a:hover {
+  color: var(--navy);
+  border-color: #aec2d0;
+}
+
+.examFilters a.active {
+  color: #fff;
+  background: var(--navy);
+  border-color: var(--navy);
+}
+
+.examFilters a.active span {
+  color: var(--navy);
+  background: #fff;
+}
+
+.examFilters a:focus-visible {
+  outline: 3px solid #8aadd2;
+  outline-offset: 2px;
+}
+
+.dashboardExamStatus {
+  text-transform: capitalize;
+}
+
+.dashboardExamStatus.active { color: #2f775b; }
+.dashboardExamStatus.draft { color: #956321; }
+.dashboardExamStatus.archived { color: #697b8a; }
+
+.dashboardEmptyState.compact {
+  min-height: 220px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .examFilters a { transition: none; }
+}

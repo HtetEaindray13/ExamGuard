@@ -1,6 +1,8 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import AuthButton from "./auth-button";
+import ThemeToggle from "./theme-toggle";
 
 function Icon({ name, size = 20 }: { name: string; size?: number }) {
   const paths: Record<string, React.ReactNode> = {
@@ -54,6 +56,7 @@ type QuestionType = "multiple-choice" | "true-false" | "short-answer";
 type ExamQuestion = { id: string; type: QuestionType; prompt: string; options: string[]; answer: string; points: number; maxWords?: number };
 type MonitoringSettings = { tabSwitch: boolean; fullscreen: boolean; clipboard: boolean; faceAbsence: boolean; multipleFaces: boolean; cameraStopped: boolean; headOrientation: boolean };
 type StoredExam = { id: string; title: string; subject: string; instructions: string; duration: string; questions: ExamQuestion[]; monitoring: MonitoringSettings; studentCode: string; teacherKey: string; createdAt: string };
+type SessionAccount = { displayName: string; role: "student" | "teacher" | null; studentId: string | null };
 type RiskLevel = "Low" | "Medium" | "High";
 type RiskFilter = "All" | RiskLevel;
 type SortMode = "priority" | "latest";
@@ -65,6 +68,13 @@ type IntegrityEvent = { type?: string; label: string; detail: string; time: stri
 type FaceDetectorLike = { detect: (source: HTMLVideoElement) => Promise<DetectorFrame>; close?: () => void };
 type NativeFaceDetectorLike = { detect: (source: HTMLVideoElement) => Promise<unknown[]>; close?: () => void };
 type FaceDetectorConstructor = new (options?: { maxDetectedFaces?: number; fastMode?: boolean }) => NativeFaceDetectorLike;
+
+async function fetchSessionAccount() {
+  const response = await fetch("/api/auth/session", { cache: "no-store" });
+  const result = await response.json() as { user?: SessionAccount | null };
+  return result.user ?? null;
+}
+
 type Submission = {
   id: string;
   examCode?: string;
@@ -79,7 +89,9 @@ type Submission = {
   submitted: string;
   duration: string;
   manualReviewCount?: number;
-  answers: { prompt: string; student: string; correct: string; result: "Correct" | "Incorrect" | "Not answered" | "Manual review"; points: string; questionType?: QuestionType; maxWords?: number }[];
+  manualPointsTotal?: number;
+  review?: { decision: Exclude<ReviewDecision, "Unreviewed">; feedback: string; manualScore: number; reviewedAt: string };
+  answers: { prompt: string; student: string; correct: string; result: "Correct" | "Incorrect" | "Not answered" | "Manual review"; points: string; questionType?: QuestionType; maxWords?: number; maxPoints?: number }[];
   timeline: IntegrityEvent[];
   identityPhoto?: string;
   photo?: string;
@@ -87,7 +99,6 @@ type Submission = {
 
 const EXAMS_STORAGE_KEY = "examguard:exams";
 const SUBMISSIONS_STORAGE_KEY = "examguard:submissions";
-const REVIEWS_STORAGE_KEY = "examguard:reviews";
 const LOCAL_MEDIAPIPE_WASM_PATH = "/mediapipe/wasm";
 const LOCAL_FACE_LANDMARKER_MODEL_PATH = "/mediapipe/models/face_landmarker.task";
 const CDN_MEDIAPIPE_WASM_PATH = "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@1.0.1/wasm";
@@ -177,8 +188,21 @@ function writeLocal<T>(key: string, value: T) {
   try {
     window.localStorage.setItem(key, JSON.stringify(value));
   } catch {
-    // Local persistence is optional for this no-account prototype.
+    // Local persistence supplements the account-backed database.
   }
+}
+
+async function findExamByCode(code: string) {
+  let exam = readLocal<Record<string, StoredExam>>(EXAMS_STORAGE_KEY, {})[code];
+  try {
+    const response = await fetch(`/api/exams?code=${encodeURIComponent(code)}`);
+    const result = await response.json() as { exam?: StoredExam; error?: string };
+    if (response.ok && result.exam) exam = result.exam;
+    else if (!exam) return { exam: null, error: result.error || "We could not find that exam." };
+  } catch {
+    if (!exam) return { exam: null, error: "The exam database is temporarily unavailable." };
+  }
+  return { exam: exam ?? null, error: "" };
 }
 
 function makeIntegrityEvent(type: string, detail: string, overrides: Partial<IntegrityEvent> = {}): IntegrityEvent {
@@ -268,6 +292,7 @@ const demoExamQuestions: ExamQuestion[] = [
 
 export default function Home() {
   const [menuOpen, setMenuOpen] = useState(false);
+  const [sessionAccount, setSessionAccount] = useState<SessionAccount | null | undefined>(undefined);
   const [modal, setModal] = useState<"create" | "manage" | null>(null);
   const [examCode, setExamCode] = useState("");
   const [studentNotice, setStudentNotice] = useState("");
@@ -318,16 +343,114 @@ export default function Home() {
   const [examEvents, setExamEvents] = useState<Submission["timeline"]>([]);
   const [submitConfirm, setSubmitConfirm] = useState(false);
   const [examSubmitted, setExamSubmitted] = useState(false);
+  const [submissionSaving, setSubmissionSaving] = useState(false);
   const [teacherDashboard, setTeacherDashboard] = useState(false);
   const [selectedSubmissionId, setSelectedSubmissionId] = useState<string | null>(null);
   const [dashboardRiskFilter, setDashboardRiskFilter] = useState<RiskFilter>("All");
   const [dashboardSort, setDashboardSort] = useState<SortMode>("priority");
   const [reviewDecision, setReviewDecision] = useState<ReviewDecision>("Unreviewed");
   const [reviewNote, setReviewNote] = useState("");
-  const [reviewRecords, setReviewRecords] = useState<Record<string, { decision: ReviewDecision; note: string }>>(() => readLocal<Record<string, { decision: ReviewDecision; note: string }>>(REVIEWS_STORAGE_KEY, {}));
+  const [reviewManualScore, setReviewManualScore] = useState(0);
+  const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewNotice, setReviewNotice] = useState("");
   const [photoPreview, setPhotoPreview] = useState<{ src: string; name: string } | null>(null);
   const submissionSavedRef = useRef(false);
+  const teacherActionHandledRef = useRef(false);
+  const studentActionHandledRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void fetchSessionAccount()
+      .then((account) => { if (!cancelled) setSessionAccount(account); })
+      .catch(() => { if (!cancelled) setSessionAccount(null); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (teacherActionHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    const action = params.get("teacherAction");
+    if (action !== "create" && action !== "manage") return;
+    teacherActionHandledRef.current = true;
+    const code = params.get("code")?.replace(/\D/g, "") ?? "";
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+    const returnTo = `/?teacherAction=${action}${code ? `&code=${encodeURIComponent(code)}` : ""}`;
+    let cancelled = false;
+    void fetchSessionAccount().then((account) => {
+      if (cancelled) return;
+      if (!account) {
+        window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+        return;
+      }
+      if (account.role !== "teacher") {
+        setNotice("This account is registered as a student. Teacher tools are not available.");
+        return;
+      }
+      if (action === "manage") {
+        if (code) setManageExamCode(code.slice(0, 6));
+        setModal("manage");
+        return;
+      }
+      setModal("create");
+      setWizardStep(0);
+      setWizardNotice("");
+      setPublishedExam(null);
+      setExamTitle("");
+      setSubject("");
+      setInstructions("");
+      setDuration("45");
+      setQuestions([newQuestion()]);
+      setActiveQuestion(0);
+      setMonitoring({ tabSwitch: true, fullscreen: true, clipboard: true, faceAbsence: true, multipleFaces: true, cameraStopped: true, headOrientation: true });
+      setStudentExam(null);
+    }).catch(() => { if (!cancelled) setNotice("We could not verify your account. Please try again."); });
+    return () => { cancelled = true; };
+  }, []);
+
+  useEffect(() => {
+    if (studentActionHandledRef.current) return;
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("studentAction") !== "join") return;
+    const code = params.get("code")?.replace(/\D/g, "").slice(0, 6) ?? "";
+    if (code.length !== 6) return;
+    studentActionHandledRef.current = true;
+    window.history.replaceState({}, "", `${window.location.pathname}${window.location.hash}`);
+    const returnTo = `/?studentAction=join&code=${encodeURIComponent(code)}`;
+    let cancelled = false;
+    void Promise.all([fetchSessionAccount(), findExamByCode(code)]).then(([account, result]) => {
+      if (cancelled) return;
+      if (!account) {
+        window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+        return;
+      }
+      if (account.role !== "student") {
+        setExamCode(code);
+        setStudentNotice("This account is registered as a teacher. Student exam access is not available.");
+        return;
+      }
+      if (!result.exam) {
+        setExamCode(code);
+        setStudentNotice(result.error);
+        return;
+      }
+      setExamCode(code);
+      setStudentExam(result.exam);
+      setStudentNotice("");
+      setStudentFlow(true);
+      setStudentStep(0);
+      setStudentName(account.displayName);
+      setStudentId(account.studentId ?? "");
+      setStudentConsent(false);
+      setIdentityPhoto(null);
+      setDeviceChecking(false);
+      setDeviceChecks({ camera: false, face: false, lighting: false, browser: false, connection: false, fullscreen: false });
+      orientationBaselineRef.current = null;
+      orientationStateRef.current = { direction: null, since: 0, alerted: false, confidence: 0 };
+      setOrientationDirection("center");
+      setOrientationCountdown(null);
+    }).catch(() => { if (!cancelled) setStudentNotice("We could not verify your account. Please try again."); });
+    return () => { cancelled = true; };
+  }, []);
 
   useEffect(() => {
     const revealItems = Array.from(document.querySelectorAll<HTMLElement>("[data-reveal]"));
@@ -387,6 +510,7 @@ export default function Home() {
     const total = autoGradedQuestions.reduce((sum, question) => sum + question.points, 0);
     const score = autoGradedQuestions.reduce((sum, question) => sum + (examAnswers[question.id] === question.answer ? question.points : 0), 0);
     const manualReviewCount = examQuestions.filter((question) => question.type === "short-answer").length;
+    const manualPointsTotal = examQuestions.filter((question) => question.type === "short-answer").reduce((sum, question) => sum + question.points, 0);
     const answers = examQuestions.map((question) => {
       const studentValue = examAnswers[question.id];
       const correctValue = question.answer;
@@ -397,28 +521,36 @@ export default function Home() {
         return `${value}. ${question.options[optionIndex] || value}`;
       };
       const result: "Correct" | "Incorrect" | "Not answered" | "Manual review" = !studentValue ? "Not answered" : question.type === "short-answer" ? "Manual review" : studentValue === correctValue ? "Correct" : "Incorrect";
-      if (question.type === "short-answer") return { prompt: question.prompt, student: displayAnswer(studentValue), correct: "Not auto-scored", result, points: "Teacher marks outside ExamGuard", questionType: question.type, maxWords: question.maxWords };
+      if (question.type === "short-answer") return { prompt: question.prompt, student: displayAnswer(studentValue), correct: "Not auto-scored", result, points: `Pending / ${question.points}`, questionType: question.type, maxWords: question.maxWords, maxPoints: question.points };
       return { prompt: question.prompt, student: displayAnswer(studentValue), correct: displayAnswer(correctValue), result, points: result === "Correct" ? `${question.points} / ${question.points}` : result === "Not answered" ? "—" : `0 / ${question.points}` };
     });
     const initials = studentName.trim().split(/\s+/).map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "ST";
     const risk: RiskLevel = examEvents.some((event) => event.level === "High") ? "High" : examEvents.some((event) => event.level === "Medium") ? "Medium" : "Low";
     const submissionId = globalThis.crypto?.randomUUID?.() ?? `${examCode}-${studentId.trim()}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
-    return { id: submissionId, examCode, studentId, name: studentName.trim() || "Student", initials, status: "Submitted", score, total, manualReviewCount, events: examEvents.length, risk, submitted: new Date().toISOString(), duration: formatExamTime(Math.max(0, (Math.max(1, Number(studentExam?.duration || duration) || 45) * 60) - examSecondsLeft)), answers, timeline: examEvents, identityPhoto: identityPhoto ?? undefined };
+    return { id: submissionId, examCode, studentId, name: studentName.trim() || "Student", initials, status: "Submitted", score, total, manualReviewCount, manualPointsTotal, events: examEvents.length, risk, submitted: new Date().toISOString(), duration: formatExamTime(Math.max(0, (Math.max(1, Number(studentExam?.duration || duration) || 45) * 60) - examSecondsLeft)), answers, timeline: examEvents, identityPhoto: identityPhoto ?? undefined };
   }, [examQuestions, examAnswers, studentName, examEvents, examCode, studentId, studentExam?.duration, duration, examSecondsLeft, identityPhoto]);
 
-  const saveStudentSubmission = useCallback(() => {
-    if (submissionSavedRef.current) return;
+  const saveStudentSubmission = useCallback(async () => {
+    if (submissionSavedRef.current) return { saved: true, error: "" };
     const submission = buildStudentSubmission();
-    const { identityPhoto: _identityPhoto, ...localSubmission } = submission;
+    try {
+      const response = await fetch("/api/submissions", {
+        method: "POST",
+        headers: { "content-type": "application/json" },
+        body: JSON.stringify(submission),
+      });
+      const result = await response.json() as { error?: string };
+      if (!response.ok) return { saved: false, error: result.error || "Your submission could not be saved." };
+    } catch {
+      return { saved: false, error: "The submission database is temporarily unavailable. Please try again." };
+    }
+    const localSubmission = { ...submission };
+    Reflect.deleteProperty(localSubmission, "identityPhoto");
     const stored = readLocal<Submission[]>(SUBMISSIONS_STORAGE_KEY, []);
     writeLocal(SUBMISSIONS_STORAGE_KEY, [...stored, localSubmission]);
     setRealSubmissions((current) => [...current, localSubmission]);
-    void fetch("/api/submissions", {
-      method: "POST",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify(submission),
-    }).catch(() => undefined);
     submissionSavedRef.current = true;
+    return { saved: true, error: "" };
   }, [buildStudentSubmission]);
 
   const recordIntegrityEvent = useCallback((event: IntegrityEvent) => {
@@ -603,11 +735,18 @@ export default function Home() {
   useEffect(() => {
     if (examWorkspace && !examSubmitted && examSecondsLeft === 0) {
       const submitTimer = window.setTimeout(() => {
-        saveStudentSubmission();
-        setExamSubmitted(true);
-        setSubmitConfirm(false);
-        setOrientationDirection("center");
-        setOrientationCountdown(null);
+        setSubmissionSaving(true);
+        void saveStudentSubmission().then((result) => {
+          setSubmissionSaving(false);
+          if (!result.saved) {
+            setExamWarning(result.error);
+            return;
+          }
+          setExamSubmitted(true);
+          setSubmitConfirm(false);
+          setOrientationDirection("center");
+          setOrientationCountdown(null);
+        });
       }, 0);
       return () => window.clearTimeout(submitTimer);
     }
@@ -638,31 +777,37 @@ export default function Home() {
   }, [examWorkspace, examSubmitted, recordIntegrityEvent]);
 
   async function joinExam() {
-    if (examCode.replace(/\D/g, "").length !== 6) {
+    const code = examCode.replace(/\D/g, "");
+    if (code.length !== 6) {
       setStudentNotice("Enter the six-digit code provided by your teacher.");
       return;
     }
-    let storedExam = readLocal<Record<string, StoredExam>>(EXAMS_STORAGE_KEY, {})[examCode];
     try {
-      const response = await fetch(`/api/exams?code=${encodeURIComponent(examCode)}`);
-      const result = await response.json() as { exam?: StoredExam; error?: string };
-      if (response.ok && result.exam) storedExam = result.exam;
-      else if (!storedExam) {
-        setStudentNotice(result.error || "We could not find that exam.");
+      const account = await fetchSessionAccount();
+      if (!account) {
+        const returnTo = `/?studentAction=join&code=${encodeURIComponent(code)}`;
+        window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
         return;
       }
+      if (account.role !== "student") {
+        setStudentNotice("This account is registered as a teacher. Student exam access is not available.");
+        return;
+      }
+      const result = await findExamByCode(code);
+      if (!result.exam) {
+        setStudentNotice(result.error);
+        return;
+      }
+      setStudentExam(result.exam);
+      setStudentName(account.displayName);
+      setStudentId(account.studentId ?? "");
     } catch {
-      if (!storedExam) {
-        setStudentNotice("The exam database is temporarily unavailable.");
-        return;
-      }
+      setStudentNotice("We could not verify your account. Please try again.");
+      return;
     }
-    setStudentExam(storedExam ?? null);
     setStudentNotice("");
     setStudentFlow(true);
     setStudentStep(0);
-    setStudentName("");
-    setStudentId("");
     setStudentConsent(false);
     setIdentityPhoto(null);
     setDeviceChecking(false);
@@ -785,8 +930,15 @@ export default function Home() {
     setExamMarked((current) => ({ ...current, [currentExamQuestion.id]: !current[currentExamQuestion.id] }));
   }
 
-  function submitExam() {
-    saveStudentSubmission();
+  async function submitExam() {
+    if (submissionSaving) return;
+    setSubmissionSaving(true);
+    const result = await saveStudentSubmission();
+    setSubmissionSaving(false);
+    if (!result.saved) {
+      setExamWarning(result.error);
+      return;
+    }
     setExamSubmitted(true);
     setSubmitConfirm(false);
     setExamWarning("");
@@ -795,6 +947,25 @@ export default function Home() {
   }
 
   function closeMenu() { setMenuOpen(false); }
+
+  async function openTeacherEntryAction(action: "create" | "manage", code = "") {
+    const returnTo = `/?teacherAction=${action}${code ? `&code=${encodeURIComponent(code)}` : ""}`;
+    try {
+      const account = await fetchSessionAccount();
+      if (!account) {
+        window.location.assign(`/login?returnTo=${encodeURIComponent(returnTo)}`);
+        return;
+      }
+      if (account.role !== "teacher") {
+        setNotice("This account is registered as a student. Teacher tools are not available.");
+        return;
+      }
+      if (action === "create") startCreateWizard();
+      else setModal("manage");
+    } catch {
+      setNotice("We could not verify your account. Please try again.");
+    }
+  }
 
   async function openTeacherDashboard() {
     const code = manageExamCode.replace(/\D/g, "");
@@ -829,19 +1000,36 @@ export default function Home() {
   }
 
   function openSubmission(id: string) {
-    const record = reviewRecords[id];
+    const record = dashboardSubmissions.find((submission) => submission.id === id)?.review;
     setSelectedSubmissionId(id);
     setReviewDecision(record?.decision ?? "Unreviewed");
-    setReviewNote(record?.note ?? "");
+    setReviewNote(record?.feedback ?? "");
+    setReviewManualScore(record?.manualScore ?? 0);
     setReviewNotice("");
   }
 
-  function saveReview() {
+  async function saveReview() {
     if (!selectedSubmissionId) return;
-    const nextRecords = { ...reviewRecords, [selectedSubmissionId]: { decision: reviewDecision, note: reviewNote } };
-    setReviewRecords(nextRecords);
-    writeLocal(REVIEWS_STORAGE_KEY, nextRecords);
-    setReviewNotice("Review saved for this session.");
+    if (reviewDecision === "Unreviewed") {
+      setReviewNotice("Choose a decision before saving.");
+      return;
+    }
+    setReviewSaving(true);
+    setReviewNotice("");
+    try {
+      const response = await fetch("/api/reviews", { method: "PUT", headers: { "content-type": "application/json" }, body: JSON.stringify({ submissionId: selectedSubmissionId, decision: reviewDecision, feedback: reviewNote, manualScore: reviewManualScore }) });
+      const result = await response.json() as { review?: Submission["review"]; error?: string };
+      if (!response.ok || !result.review) {
+        setReviewNotice(result.error || "The review could not be saved.");
+        return;
+      }
+      setRealSubmissions((current) => current.map((submission) => submission.id === selectedSubmissionId ? { ...submission, review: result.review } : submission));
+      setReviewNotice("Review saved. The student can now see the final result and feedback.");
+    } catch {
+      setReviewNotice("The review database is temporarily unavailable.");
+    } finally {
+      setReviewSaving(false);
+    }
   }
 
   function startCreateWizard() {
@@ -960,8 +1148,8 @@ export default function Home() {
 
   const currentQuestion = questions[activeQuestion] ?? questions[0] ?? newQuestion();
   const selectedSubmission = dashboardSubmissions.find((submission) => submission.id === selectedSubmissionId) ?? null;
-  const reviewedCount = Object.values(reviewRecords).filter((record) => record.decision !== "Unreviewed").length;
-  const needsReviewCount = dashboardSubmissions.filter((submission) => submission.risk !== "Low" && !reviewRecords[submission.id]).length;
+  const reviewedCount = dashboardSubmissions.filter((submission) => submission.review).length;
+  const needsReviewCount = dashboardSubmissions.filter((submission) => !submission.review).length;
 
   return (
     <main className="homePage">
@@ -974,12 +1162,12 @@ export default function Home() {
 </a>
         <nav className={`homeNav ${menuOpen ? "open" : ""}`} aria-label="Primary navigation">
           {navItems.map(([label, href]) => <a key={href} href={`#${href}`} onClick={closeMenu}>{label}</a>)}
-          <button className="mobileAction" onClick={() => { setModal("manage"); closeMenu(); }}>Manage existing exam</button>
-          <button className="mobileAction mobilePrimary" onClick={() => { startCreateWizard(); closeMenu(); }}>Create new exam</button>
+          <ThemeToggle className="mobileThemeToggle" />
+          <AuthButton mobile />
         </nav>
         <div className="homeActions">
-<button className="headerLink" onClick={() => setModal("manage")}>Manage</button>
-<button className="headerButton" onClick={startCreateWizard}>Create</button>
+<ThemeToggle />
+<AuthButton />
 </div>
         <button className="menuButton" onClick={() => setMenuOpen(!menuOpen)} aria-label={menuOpen ? "Close menu" : "Open menu"}>
 <Icon name={menuOpen ? "close" : "menu"} size={21} />
@@ -1078,7 +1266,7 @@ export default function Home() {
 <span>Signals</span>
 <span>Priority</span>
 <span />
-</div>{filteredDashboardSubmissions.map((submission) => { const record = reviewRecords[submission.id]; return <div className="submissionRow" role="row" key={submission.id}>
+</div>{filteredDashboardSubmissions.map((submission) => <div className="submissionRow" role="row" key={submission.id}>
 <div className="submissionStudent">
 <span className="studentAvatar">{submission.photo ? <img src={submission.photo} alt={`${submission.name} identity verification`} /> : submission.initials}</span>
 <span>
@@ -1088,13 +1276,13 @@ export default function Home() {
 </div>
 <span className={`submissionStatus ${submission.status === "Submitted" ? "submitted" : "progress"}`}>
 <i />{submission.status}</span>
-<strong className="submissionScore">{submission.total === 0 ? "Manual" : submission.score === null ? "—" : `${submission.score}/${submission.total}`}</strong>
+<strong className="submissionScore">{submission.review ? `${(submission.score ?? 0) + submission.review.manualScore}/${submission.total + (submission.manualPointsTotal ?? submission.manualReviewCount ?? 0)}` : submission.total === 0 ? "Manual" : submission.score === null ? "—" : `${submission.score}/${submission.total}`}</strong>
 <span className="submissionSignals">
 <Icon name="shield" size={13} /> {submission.events} event{submission.events === 1 ? "" : "s"}</span>
-<span className={`riskChip ${submission.risk.toLowerCase()}`}>{record?.decision !== "Unreviewed" ? "Reviewed" : submission.risk} </span>
-<button type="button" className="reviewRowButton" onClick={() => openSubmission(submission.id)}>{record?.decision !== "Unreviewed" ? "View review" : "Review submission"}<Icon name="arrow" size={13} />
+<span className={`riskChip ${submission.review?.decision === "Valid concern" ? "high" : submission.review ? "low" : submission.risk.toLowerCase()}`}>{submission.review?.decision === "Valid concern" ? "Needs follow-up" : submission.review ? "Reviewed" : submission.risk} </span>
+<button type="button" className="reviewRowButton" onClick={() => openSubmission(submission.id)}>{submission.review ? "View review" : "Review submission"}<Icon name="arrow" size={13} />
 </button>
-</div>; })}</div> : <div className="dashboardEmpty compact">
+</div>)}</div> : <div className="dashboardEmpty compact">
 <span className="dashboardEmptyIcon">
 <Icon name="shield" size={20} />
 </span>
@@ -1119,7 +1307,7 @@ export default function Home() {
 </div>
               <div className="reviewHero">
 <div className="reviewStudentIdentity">{selectedSubmission.photo ? <button type="button" className="reviewAvatar photoPreviewTrigger" onClick={() => setPhotoPreview({ src: selectedSubmission.photo!, name: selectedSubmission.name })} aria-label={`View larger identity photo for ${selectedSubmission.name}`}>
-<img src={selectedSubmission.photo} alt={`${selectedSubmission.name} identity verification photo`} />
+<img src={selectedSubmission.photo} alt={`${selectedSubmission.name} identity verification`} />
 </button> : <span className="reviewAvatar">{selectedSubmission.initials}</span>}<div>
 <span className="sectionKicker">Student submission</span>
 <h1>{selectedSubmission.name}</h1>
@@ -1128,8 +1316,8 @@ export default function Home() {
 </div>
 <div className="reviewHeroScore">
 <span className={`riskChip ${selectedSubmission.risk.toLowerCase()}`}>{selectedSubmission.risk} priority</span>
-<strong>{selectedSubmission.total === 0 ? "Manual" : selectedSubmission.score === null ? "—" : `${Math.round((selectedSubmission.score / selectedSubmission.total) * 100)}%`}</strong>
-<small>{selectedSubmission.total === 0 ? "Teacher review required" : selectedSubmission.score === null ? "Score in progress" : `${selectedSubmission.score}/${selectedSubmission.total} auto-graded points`}</small>
+<strong>{selectedSubmission.review ? `${(selectedSubmission.score ?? 0) + selectedSubmission.review.manualScore}/${selectedSubmission.total + (selectedSubmission.manualPointsTotal ?? selectedSubmission.manualReviewCount ?? 0)}` : selectedSubmission.total === 0 ? "Manual" : selectedSubmission.score === null ? "—" : `${Math.round((selectedSubmission.score / selectedSubmission.total) * 100)}%`}</strong>
+<small>{selectedSubmission.review ? `Final score · reviewed ${new Date(selectedSubmission.review.reviewedAt).toLocaleDateString()}` : selectedSubmission.total === 0 ? "Teacher review required" : selectedSubmission.score === null ? "Score in progress" : `${selectedSubmission.score}/${selectedSubmission.total} auto-graded points`}</small>
 </div>
 </div>
               {photoPreview && <div className="identityPhotoLightbox" role="presentation" onMouseDown={(event) => { if (event.target === event.currentTarget) setPhotoPreview(null); }}>
@@ -1143,7 +1331,7 @@ export default function Home() {
 <Icon name="close" size={18} />
 </button>
 </header>
-<img src={photoPreview.src} alt={`${photoPreview.name} enlarged identity verification photo`} />
+<img src={photoPreview.src} alt={`${photoPreview.name} enlarged identity verification`} />
 </section>
 </div>}
               {reviewNotice && <div className="reviewNotice" role="status">
@@ -1213,7 +1401,7 @@ export default function Home() {
 <h2>Classify this review</h2>
 </div>
 </div>
-<p>Choose the outcome that best explains the complete session. This does not change the student score automatically.</p>
+<p>Choose an integrity outcome, add any manual marks, and share useful feedback with the student.</p>
 <label className="decisionLabel" htmlFor="review-decision">Decision<select id="review-decision" value={reviewDecision} onChange={(event) => setReviewDecision(event.target.value as ReviewDecision)}>
 <option>Unreviewed</option>
 <option>Valid concern</option>
@@ -1222,9 +1410,11 @@ export default function Home() {
 <option>Acceptable</option>
 </select>
 </label>
-<label className="decisionLabel" htmlFor="review-note">Private note<textarea id="review-note" value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} placeholder="Add context for your records..." rows={3} />
+<label className="decisionLabel" htmlFor="review-score">Manual score <small>out of {selectedSubmission.manualPointsTotal ?? selectedSubmission.manualReviewCount ?? 0}</small><input id="review-score" type="number" min="0" max={selectedSubmission.manualPointsTotal ?? selectedSubmission.manualReviewCount ?? 0} step="1" value={reviewManualScore} onChange={(event) => setReviewManualScore(Number(event.target.value))} />
 </label>
-<button type="button" className="dashboardPrimary decisionSave" onClick={saveReview}>Save teacher review <Icon name="check" size={14} />
+<label className="decisionLabel" htmlFor="review-note">Feedback for student<textarea id="review-note" value={reviewNote} onChange={(event) => setReviewNote(event.target.value)} maxLength={2000} placeholder="Explain the result or suggest what to improve..." rows={4} />
+</label>
+<button type="button" className="dashboardPrimary decisionSave" onClick={() => void saveReview()} disabled={reviewSaving}>{reviewSaving ? "Saving review..." : "Save teacher review"} <Icon name="check" size={14} />
 </button>
 </section>
 </aside>
@@ -1324,7 +1514,7 @@ export default function Home() {
 <span>Teacher review</span>
 </div>
 </div>
-<button type="button" className="receiptButton" onClick={() => { setExamWorkspace(false); setNotice("Submission receipt saved for this demo."); }}>Return home <Icon name="arrow" size={15} />
+<button type="button" className="receiptButton" onClick={() => { setExamWorkspace(false); setNotice("Submission saved to your student dashboard."); }}>Return home <Icon name="arrow" size={15} />
 </button>
 </main>}<aside className="examSidebar">
 <div className="examProgressCard">
@@ -1381,7 +1571,7 @@ export default function Home() {
 <p>You answered {Object.keys(examAnswers).length} of {examQuestions.length} questions. You can return to review unanswered questions before submitting.</p>
 <div>
 <button type="button" className="submitCancel" onClick={() => setSubmitConfirm(false)}>Keep reviewing</button>
-<button type="button" className="submitConfirmButton" onClick={submitExam}>Submit now <Icon name="arrow" size={14} />
+<button type="button" className="submitConfirmButton" onClick={() => void submitExam()} disabled={submissionSaving}>{submissionSaving ? "Saving…" : "Submit now"} {!submissionSaving && <Icon name="arrow" size={14} />}
 </button>
 </div>
 </div>
@@ -1415,10 +1605,10 @@ export default function Home() {
 </span>
 <span className="sectionKicker">{studentStep === 0 ? "Welcome" : studentStep === 1 ? "Your privacy matters" : "Almost ready"}</span>
 <h2>{studentStep === 0 ? "Start with your exam details." : studentStep === 1 ? "Know what is monitored before you begin." : "Make sure your device is ready."}</h2>
-<p>{studentStep === 0 ? "You do not need an account. Use the code from your teacher to join." : studentStep === 1 ? "ExamGuard shows objective signals to your teacher. It does not decide whether you cheated." : "A short check helps reduce false alerts caused by camera, browser, or connection problems."}</p>
+<p>{studentStep === 0 ? "Your signed-in account keeps this exam and its result connected to you." : studentStep === 1 ? "ExamGuard shows objective signals to your teacher. It does not decide whether you cheated." : "A short check helps reduce false alerts caused by camera, browser, or connection problems."}</p>
 <div className="studentAsideNote">
 <Icon name="lock" size={14} />
-<span>Your session is connected to this exam code only.</span>
+<span>Your result is connected privately to your signed-in account.</span>
 </div>
 </aside>
 <main className="studentMain">{studentNotice && <div className="studentNotice" role="status">
@@ -1429,7 +1619,7 @@ export default function Home() {
 <span className="sectionKicker">Step 01</span>
 <h2>Join your exam</h2>
 </div>
-<span className="studentPanelMeta">No account required</span>
+<span className="studentPanelMeta">Signed-in student</span>
 </div>
 <div className="studentExamSummary">
 <span className="summaryIcon">
@@ -1609,7 +1799,7 @@ export default function Home() {
 <p>{wizardStep === 0 ? "Set the expectations students will see before they begin." : wizardStep === 1 ? "Use multiple-choice and True/False questions for this MVP." : wizardStep === 2 ? "These settings create explainable events for the teacher timeline." : "Review the details once, then publish both access codes."}</p>
 <div className="wizardAsideNote">
 <Icon name="check" size={14} />
-<span>No account is needed for this prototype.</span>
+<span>Your signed-in account keeps the result private and available later.</span>
 </div>
 </aside>
               <div className="wizardMain">{wizardNotice && <div className="wizardNotice" role="status">
@@ -1792,7 +1982,7 @@ export default function Home() {
 </span>
 <span className="sectionKicker">Exam published</span>
 <h2>Share the student code.</h2>
-<p>Save the private teacher key somewhere safe. It cannot be recovered without an account.</p>
+<p>Save the private teacher key somewhere safe. It is required to reopen this exam.</p>
 <div className="accessCards">
 <div>
 <span>Student exam code</span>
@@ -1847,43 +2037,46 @@ export default function Home() {
 <span>
 <Icon name="shield" size={14} /> Signals, not accusations.</span>
 <span>
-<Icon name="lock" size={14} /> No account needed for the MVP.</span>
+<Icon name="lock" size={14} /> Account-backed exam and score history.</span>
 </div>
         </div>
 
         <div className="entryPanel" data-reveal="right" aria-label="Choose how to start">
           <div className="entryHeader">
 <div>
-<span className="sectionKicker">Start here</span>
-<h2>What brings you to ExamGuard?</h2>
+<span className="sectionKicker">{sessionAccount?.role ? `${sessionAccount.role} home` : "Start here"}</span>
+<h2>{sessionAccount?.role ? `Welcome back, ${sessionAccount.displayName.split(" ")[0]}` : sessionAccount ? "Finish setting up your account" : "What brings you to ExamGuard?"}</h2>
 </div>
 </div>
-          <div className="entryCards">
-            <article className="roleCard teacherCard" data-reveal>
+          <div className={`entryCards ${sessionAccount?.role ? "personalizedEntryCards" : ""}`}>
+            {sessionAccount === undefined && <div className="roleHomeLoading" aria-label="Loading your account experience"><span /><span /><span /></div>}
+            {(sessionAccount === null || sessionAccount?.role === "teacher") && <article className={`roleCard teacherCard ${sessionAccount?.role === "teacher" ? "personalizedRoleCard" : ""}`}>
 <div className="roleTop">
 <span className="roleIcon">
 <Icon name="chart" size={20} />
 </span>
-<span className="roleLabel">For teachers</span>
+<span className="roleLabel">{sessionAccount?.role === "teacher" ? "Your teacher workspace" : "For teachers"}</span>
 </div>
-<h3>Run your next exam</h3>
-<p>Create a new assessment or return to an exam you already published.</p>
+<h3>{sessionAccount?.role === "teacher" ? "Ready for your next exam?" : "Run your next exam"}</h3>
+<p>{sessionAccount?.role === "teacher" ? "Create an assessment, manage an exam, or return to your teacher dashboard." : "Create a new assessment or return to an exam you already published."}</p>
 <div className="roleActions">
-<button onClick={startCreateWizard}>Create new exam <Icon name="arrow" size={14} />
+<button onClick={() => void openTeacherEntryAction("create")}>Create new exam <Icon name="arrow" size={14} />
 </button>
-<button className="softAction" onClick={() => setModal("manage")}>Manage existing <Icon name="arrow" size={14} />
+<button className="softAction" onClick={() => void openTeacherEntryAction("manage")}>Manage existing <Icon name="arrow" size={14} />
 </button>
+{sessionAccount?.role === "teacher" && <button className="softAction" onClick={() => window.location.assign("/dashboard/teacher")}>View dashboard <Icon name="arrow" size={14} /></button>}
 </div>
 </article>
-            <article className="roleCard studentCard" data-reveal>
+            }
+            {(sessionAccount === null || sessionAccount?.role === "student") && <article className={`roleCard studentCard ${sessionAccount?.role === "student" ? "personalizedRoleCard" : ""}`}>
 <div className="roleTop">
 <span className="roleIcon">
 <Icon name="people" size={20} />
 </span>
-<span className="roleLabel">For students</span>
+<span className="roleLabel">{sessionAccount?.role === "student" ? "Your student workspace" : "For students"}</span>
 </div>
-<h3>Join an exam</h3>
-<p>Enter the six-digit code provided by your teacher. No account required.</p>
+<h3>{sessionAccount?.role === "student" ? "Join your next exam" : "Join an exam"}</h3>
+<p>{sessionAccount?.role === "student" ? "Enter the six-digit code from your teacher or return to your result history." : "Enter the six-digit code provided by your teacher. Login is requested when you continue."}</p>
 <label className="codeLabel" htmlFor="exam-code">Exam code</label>
 <div className="joinRow">
 <input id="exam-code" inputMode="numeric" maxLength={6} value={examCode} onChange={(event) => { setExamCode(event.target.value.replace(/\D/g, "")); setStudentNotice(""); }} placeholder="_ _ _ _ _ _" aria-describedby="join-help" />
@@ -1892,7 +2085,15 @@ export default function Home() {
 </button>
 </div>
 <small id="join-help" className={studentNotice ? "joinHelp error" : "joinHelp"}>{studentNotice || "You can enter the code now or come back later."}</small>
+{sessionAccount?.role === "student" && <a className="roleDashboardLink" href="/dashboard/student">View result history <Icon name="arrow" size={14} /></a>}
 </article>
+            }
+            {sessionAccount && !sessionAccount.role && <article className="roleCard roleSetupCard">
+              <span className="roleIcon"><Icon name="people" size={20} /></span>
+              <h3>Choose your account role</h3>
+              <p>Complete this one-time step before creating or joining an exam.</p>
+              <a href="/onboarding?returnTo=/dashboard">Continue account setup <Icon name="arrow" size={14} /></a>
+            </article>}
           </div>
         </div>
       </section>
@@ -1934,7 +2135,7 @@ export default function Home() {
 </span>
 <h3>Create</h3>
 <p>Add exam details, multiple-choice questions, and True/False questions.</p>
-<a href="#top" onClick={startCreateWizard}>Create an exam <Icon name="arrow" size={13} />
+<a href="#top" onClick={(event) => { event.preventDefault(); void openTeacherEntryAction("create"); }}>Create an exam <Icon name="arrow" size={13} />
 </a>
 </article>
 <article data-reveal>
@@ -2049,16 +2250,14 @@ export default function Home() {
       </section>
 
       <section className="finalSection">
-<span className="sectionKicker" data-reveal>Start with one exam</span>
-<h2 data-reveal>Make your next assessment<br />
-<em>feel a little clearer.</em>
-</h2>
-<p data-reveal>Create an exam, share a code, and see the complete flow end to end.</p>
+<span className="sectionKicker" data-reveal>{sessionAccount?.role ? `Continue as ${sessionAccount.role}` : "Start with one exam"}</span>
+<h2 data-reveal>{sessionAccount?.role === "teacher" ? <>Your next assessment<br /><em>starts here.</em></> : sessionAccount?.role === "student" ? <>Your next exam<br /><em>is one code away.</em></> : <>Make your next assessment<br /><em>feel a little clearer.</em></>}</h2>
+<p data-reveal>{sessionAccount?.role === "teacher" ? "Create an exam or return to your teacher dashboard." : sessionAccount?.role === "student" ? "Join with your teacher's code or review your result history." : "Create an exam, share a code, and see the complete flow end to end."}</p>
 <div data-reveal>
-<button className="primaryCta" onClick={startCreateWizard}>Create new exam <Icon name="arrow" size={15} />
-</button>
-<button className="secondaryCta" onClick={() => document.getElementById("exam-code")?.focus()}>Join with a code <Icon name="arrow" size={15} />
-</button>
+{(sessionAccount === null || sessionAccount?.role === "teacher") && <button className="primaryCta" onClick={() => void openTeacherEntryAction("create")}>Create new exam <Icon name="arrow" size={15} /></button>}
+{(sessionAccount === null || sessionAccount?.role === "student") && <button className={sessionAccount?.role === "student" ? "primaryCta" : "secondaryCta"} onClick={() => document.getElementById("exam-code")?.focus()}>Join with a code <Icon name="arrow" size={15} /></button>}
+{sessionAccount?.role && <button className="secondaryCta" onClick={() => window.location.assign(`/dashboard/${sessionAccount.role}`)}>View dashboard <Icon name="arrow" size={15} /></button>}
+{sessionAccount && !sessionAccount.role && <button className="primaryCta" onClick={() => window.location.assign("/onboarding?returnTo=/dashboard")}>Choose account role <Icon name="arrow" size={15} /></button>}
 </div>
 </section>
 

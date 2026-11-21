@@ -8,6 +8,62 @@
       "when": 1785984734152,
       "tag": "0000_dusty_jane_foster",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1786079484096,
+      "tag": "0001_minor_senator_kelly",
+      "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "6",
+      "when": 1786084181016,
+      "tag": "0002_fat_ultimates",
+      "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1786089918066,
+      "tag": "0003_skinny_speedball",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "6",
+      "when": 1786093886644,
+      "tag": "0004_majestic_human_cannonball",
+      "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "6",
+      "when": 1786101747192,
+      "tag": "0005_faithful_micromax",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1786104555314,
+      "tag": "0006_cuddly_sunfire",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "6",
+      "when": 1786104670071,
+      "tag": "0007_brown_bloodscream",
+      "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "6",
+      "when": 1786105997687,
+      "tag": "0008_fine_scream",
+      "breakpoints": true
     }
   ]
 }
