@@ -2,7 +2,6 @@
 
 ExamGuard is a full-stack online examination platform for creating, conducting, and reviewing monitored assessments. It gives teachers useful integrity context while keeping the final decision with a human—not an automated cheating verdict.
 
-![ExamGuard classroom preview](public/examguard-classroom.png)
 
 ## What it does
 
